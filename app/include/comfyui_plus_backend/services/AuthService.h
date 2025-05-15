@@ -24,7 +24,7 @@ class AuthService
     // Returns a pair:
     // - std::optional<models::User>: The created user model on success (excluding sensitive info).
     // - std::string: An error message if registration failed.
-    std::pair<std::optional<models::User>, std::string> registerUser(
+    std::pair<std::optional<comfyui_plus_backend::app::models::User>, std::string> registerUser(
         const std::string &username,
         const std::string &email,
         const std::string &plainPassword);

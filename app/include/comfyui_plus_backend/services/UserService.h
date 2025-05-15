@@ -1,7 +1,8 @@
+
 #pragma once
 
 #include "comfyui_plus_backend/models/User.h" // Your Drogon-style User model (DTO)
-#include <sqlpp23/sqlite3/sqlite3.h>                  // For sqlpp23 sqlite3 connection
+#include <sqlpp23/sqlite3/sqlite3.h>          // For sqlpp23 sqlite3 connection
 #include <string>
 #include <optional>
 #include <memory> // For std::shared_ptr
@@ -20,15 +21,15 @@ class UserService
 
     // Creates a user and returns the created user model (DTO), or std::nullopt on failure.
     // The password provided here is the plain text password.
-    std::optional<models::User> createUser(
+    std::optional<comfyui_plus_backend::app::models::User> createUser(
         const std::string &username,
         const std::string &email,
         const std::string &plainPassword);
 
     // These methods return the User DTO (safe for client)
-    std::optional<models::User> getUserByEmail(const std::string &email);
-    std::optional<models::User> getUserByUsername(const std::string &username);
-    std::optional<models::User> getUserById(int64_t userId);
+    std::optional<comfyui_plus_backend::app::models::User> getUserByEmail(const std::string &email);
+    std::optional<comfyui_plus_backend::app::models::User> getUserByUsername(const std::string &username);
+    std::optional<comfyui_plus_backend::app::models::User> getUserById(int64_t userId);
 
     // Helper to check if username or email already exists
     bool userExists(const std::string& username, const std::string& email);
@@ -47,7 +48,7 @@ class UserService
     // Converts an sqlpp23 result row to your application's User model DTO
     // The RowType will depend on the columns selected in your query.
     template<typename RowType>
-    models::User rowToUserModel(const RowType& row);
+    comfyui_plus_backend::app::models::User rowToUserModel(const RowType& row);
 
     // Database configuration for sqlpp23, loaded from Drogon's app config
     sqlpp::sqlite3::connection_config dbConfig_;

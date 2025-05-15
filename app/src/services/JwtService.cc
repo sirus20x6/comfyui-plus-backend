@@ -10,6 +10,7 @@ namespace services
 {
 
 JwtService::JwtService()
+    : verifier_(jwt::verify<jwt::traits::kazuho_picojson>()) // Initialize with default verifier
 {
     try
     {
@@ -44,13 +45,12 @@ JwtService::JwtService()
             // Configure the verifier
             // Note: kazuho_picojson is one of the available traits for JSON handling.
             // jwt-cpp also supports nlohmann_json if you prefer and link it.
-            verifier_ = jwt::verify<jwt::traits::kazuho_picojson>()
-                            .allow_algorithm(jwt::algorithm::hs256{jwtSecret_})
-                            .with_issuer(jwtIssuer_);
+            verifier_.allow_algorithm(jwt::algorithm::hs256{jwtSecret_})
+                    .with_issuer(jwtIssuer_);
+            
             if (!jwtAudience_.empty()) {
                 verifier_.with_audience(jwtAudience_);
             }
-
         }
         else
         {
@@ -75,14 +75,22 @@ std::string JwtService::generateToken(int64_t userId, const std::string &usernam
 
     try
     {
+        // Create a picojson object for user_id
+        picojson::value userIdValue(static_cast<double>(userId));
+        jwt::basic_claim<jwt::traits::kazuho_picojson> userIdClaim(userIdValue);
+        
+        // Create a picojson object for username
+        picojson::value usernameValue(username);
+        jwt::basic_claim<jwt::traits::kazuho_picojson> usernameClaim(usernameValue);
+        
         auto token = jwt::create<jwt::traits::kazuho_picojson>()
                          .set_issuer(jwtIssuer_)
                          .set_subject(std::to_string(userId)) // Standard "sub" claim for user ID
                          .set_audience(jwtAudience_) // Optional
                          .set_issued_at(std::chrono::system_clock::now())
                          .set_expires_at(std::chrono::system_clock::now() + std::chrono::seconds{jwtExpiresInSeconds_})
-                         .set_payload_claim("user_id", jwt::claim<jwt::traits::kazuho_picojson>(userId)) // Custom claim
-                         .set_payload_claim("username", jwt::claim<jwt::traits::kazuho_picojson>(username)) // Custom claim
+                         .set_payload_claim("user_id", userIdClaim) // Custom claim
+                         .set_payload_claim("username", usernameClaim) // Custom claim
                          .sign(jwt::algorithm::hs256{jwtSecret_});
         return token;
     }
@@ -113,10 +121,6 @@ std::optional<jwt::decoded_jwt<jwt::traits::kazuho_picojson>> JwtService::verify
 
         return decoded_token;
     }
-    catch (const jwt::token_verification_exception& e) {
-        LOG_WARN << "JWT verification failed: " << e.what() << " - Token: " << tokenString.substr(0, 30) << "...";
-        return std::nullopt;
-    }
     catch (const std::exception &e)
     {
         LOG_ERROR << "Error verifying JWT: " << e.what();
@@ -130,13 +134,20 @@ std::optional<int64_t> JwtService::getUserIdFromToken(const jwt::decoded_jwt<jwt
         if (decodedToken.has_payload_claim("user_id")) {
             auto claim = decodedToken.get_payload_claim("user_id");
             // jwt-cpp claim values need to be converted to the expected type
-            if (claim.get_type() == jwt::json::type::integer) {
-                 return claim.as_integer();
+            if (claim.get_type() == jwt::json::type::integer || 
+                claim.get_type() == jwt::json::type::number) {
+                 // For picojson, numbers are stored as double, so convert back to int64_t
+                 return static_cast<int64_t>(claim.as_number());
             } else if (claim.get_type() == jwt::json::type::string) {
                 // Sometimes user_id might be encoded as string in JWT from other systems
-                // Handle this case if necessary, e.g., by trying to parse the string
-                // For now, we expect integer.
-                LOG_WARN << "user_id claim found but is not an integer.";
+                try {
+                    return std::stoll(claim.as_string()); // string to long long
+                } catch (const std::exception& e) {
+                    LOG_WARN << "user_id claim found as string but could not convert to integer: " 
+                             << e.what();
+                }
+            } else {
+                LOG_WARN << "user_id claim found but is not a number or string.";
             }
         } else if (decodedToken.has_subject()) { // Fallback to standard "sub" claim
              std::string sub = decodedToken.get_subject();

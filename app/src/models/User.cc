@@ -1,26 +1,39 @@
 // app/src/models/User.cc
 #include "comfyui_plus_backend/models/User.h"
-#include <drogon/orm/DbClient.h> // For client operations, not strictly for model def
+#include "comfyui_plus_backend/utils/DateTimeUtils.h"
+#include <string>
 
-// If using ANET_MODEL_BEGIN/END, anet might generate initializers or you might add a constructor
-namespace comfyui_plus_backend
-{
-namespace app
-{
-namespace models
-{
-    // Example constructor if you define one (not always needed with ORM mappers)
-    User::User(const drogon::orm::Row &row) {
-        if (!row["id"].isNull())
-            id_ = row["id"].as<int64_t>();
-        username_ = row["username"].as<std::string>();
-        email_ = row["email"].as<std::string>();
-        hashedPassword_ = row["hashed_password"].as<std::string>(); // Ensure column name matches
-        if (!row["created_at"].isNull())
-            createdAt_ = row["created_at"].as<trantor::Date>();
-        if (!row["updated_at"].isNull())
-            updatedAt_ = row["updated_at"].as<trantor::Date>();
+namespace comfyui_plus_backend {
+namespace app {
+namespace models {
+
+// Static method implementation to create a User from a Row
+User User::fromRow(const ::drogon::orm::Row &row) {
+    User user;
+    if (!row["id"].isNull())
+        user.id_ = row["id"].as<int64_t>();
+    user.username_ = row["username"].as<std::string>();
+    user.email_ = row["email"].as<std::string>();
+    user.hashedPassword_ = row["hashed_password"].as<std::string>();
+    
+    // Handle date conversion using the utility class
+    if (!row["created_at"].isNull()) {
+        std::string dateStr = row["created_at"].as<std::string>();
+        user.createdAt_ = utils::DateTimeUtils::dbStringToDate(dateStr);
+    } else {
+        user.createdAt_ = trantor::Date::now();
     }
+    
+    if (!row["updated_at"].isNull()) {
+        std::string dateStr = row["updated_at"].as<std::string>();
+        user.updatedAt_ = utils::DateTimeUtils::dbStringToDate(dateStr);
+    } else {
+        user.updatedAt_ = trantor::Date::now();
+    }
+    
+    return user;
 }
-}
-}
+
+} // namespace models
+} // namespace app
+} // namespace comfyui_plus_backend

@@ -76,8 +76,7 @@ bool PasswordUtils::verifyPassword(const std::string &plainPassword, const std::
     int result = argon2id_verify(
         hashedPassword.c_str(),
         plainPassword.c_str(),
-        plainPassword.length(),
-        Argon2_id // Use Argon2_id as it's generally recommended
+        plainPassword.length()
     );
 
     if (result == ARGON2_OK)

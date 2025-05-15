@@ -1,54 +1,51 @@
-// app/include/comfyui_plus_backend/models/User.h
-#pragma once
+#include <sqlpp23/core/basic/table.h>
+#include <sqlpp23/core/basic/column.h>
 
-#include <drogon/orm/Result.h>
-#include <drogon/orm/Row.h>
-#include <drogon/orm/Field.h>
-#include <drogon/orm/Mapper.h>
-#include <trantor/utils/Date.h> // For timestamps
-#include <trantor/utils/Utilities.h> // For UUID generation if needed
+namespace comfyui_plus_backend::app::schema {
 
-namespace comfyui_plus_backend
-{
-namespace app
-{
-namespace models
-{
+struct Users {
+  struct Id {
+    static constexpr auto name  = "id";
+    using value_type            = sqlpp::bigint;                // 64‑bit
+    static constexpr auto flags = sqlpp::column_flags::primary_key
+                                | sqlpp::column_flags::auto_increment;
+  };
 
-class User
-{
-  public:
-    User() = default;
-    User(const drogon::orm::Row &row); // Constructor from ORM Row
+  struct Username {
+    static constexpr auto name  = "username";
+    using value_type            = sqlpp::text;
+    static constexpr auto flags = sqlpp::column_flags::not_null
+                                | sqlpp::column_flags::unique;
+  };
 
-    // Getters and Setters
-    std::optional<std::int64_t> getId() const { return id_; }
-    void setId(const std::int64_t &id) { id_ = id; }
+  struct Email {
+    static constexpr auto name  = "email";
+    using value_type            = sqlpp::text;
+    static constexpr auto flags = sqlpp::column_flags::not_null
+                                | sqlpp::column_flags::unique;
+  };
 
-    std::string getUsername() const { return username_; }
-    void setUsername(const std::string &username) { username_ = username; }
+  struct HashedPassword {
+    static constexpr auto name  = "hashed_password";
+    using value_type            = sqlpp::text;
+    static constexpr auto flags = sqlpp::column_flags::not_null;
+  };
 
-    std::string getEmail() const { return email_; }
-    void setEmail(const std::string &email) { email_ = email; }
+  struct CreatedAt {
+    static constexpr auto name  = "created_at";
+    using value_type            = sqlpp::time_point;
+    static constexpr auto flags = sqlpp::column_flags::default_;
+  };
 
-    std::string getHashedPassword() const { return hashedPassword_; }
-    void setHashedPassword(const std::string &hashedPassword) { hashedPassword_ = hashedPassword; }
+  struct UpdatedAt {
+    static constexpr auto name  = "updated_at";
+    using value_type            = sqlpp::time_point;
+    static constexpr auto flags = sqlpp::column_flags::default_;
+  };
 
-    trantor::Date getCreatedAt() const { return createdAt_; }
-    void setCreatedAt(const trantor::Date &createdAt) { createdAt_ = createdAt; }
-
-    trantor::Date getUpdatedAt() const { return updatedAt_; }
-    void setUpdatedAt(const trantor::Date &updatedAt) { updatedAt_ = updatedAt; }
-
-    // Member variables
-    std::optional<int64_t> id_;
-    std::string username_;
-    std::string email_;
-    std::string hashedPassword_; // Renamed for clarity
-    trantor::Date createdAt_;
-    trantor::Date updatedAt_;
+  using _column_list = sqlpp::type_vector<
+      Id, Username, Email, HashedPassword, CreatedAt, UpdatedAt>;
+  static constexpr auto name = "users";
 };
 
-} // namespace models
-} // namespace app
-} // namespace comfyui_plus_backend
+} // namespace comfyui_plus_backend::app::schema

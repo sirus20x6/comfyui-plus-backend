@@ -23,6 +23,7 @@ class User
     // Constructors
     User() = default;
     explicit User(const drogon::orm::Row &row);
+    static User fromRow(const drogon::orm::Row &row);
 
     // Getters and Setters
     std::optional<std::int64_t> getId() const { return id_; }

@@ -20,22 +20,22 @@ namespace services
 {
 
 namespace {
-    Schema::Users users_table{}; // sqlpp23 table instance
+    db_schema::Users users_table{}; // sqlpp23 table instance
 }
 
 UserService::UserService()
 {
     try {
-        auto drogonDbConfig = drogon::app().getDbClient("default")->getDbConfig();
-        dbConfig_.path_to_database = drogonDbConfig.dbname;
+        // Get database path from Drogon config
+        auto drogonDbClient = drogon::app().getDbClient("default");
+        dbConfig_.path_to_database = drogonDbClient->connectionInfo().host();
         dbConfig_.flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
-        // sqlpp23 config for logging is different:
-        // dbConfig_.debug = drogon::app().getLogLevel() == trantor::Logger::LogLevel::kDebug;
+        
+        // Enable SQL tracing in debug mode
         if (drogon::app().getLogLevel() == trantor::Logger::LogLevel::kDebug) {
-            dbConfig_.set_trace_flags(sqlpp::sqlite3::trace_statement | sqlpp::sqlite3::trace_profile);
-            dbConfig_.set_trace_logger([](const std::string_view message) {
+            dbConfig_.debug_trace = [](const std::string_view& message) {
                 LOG_DEBUG << "[sqlpp23] " << message;
-            });
+            };
         }
 
     } catch (const std::exception& e) {
@@ -94,26 +94,26 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::createUser(
     try
     {
         // Check existence (sqlpp23 style)
-        auto statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << select(sqlpp::count(users_table.id)).from(users_table)
-            << where(users_table.username == username or users_table.email == email);
+        auto select_query = sqlpp::select(sqlpp::count(users_table.id))
+            .from(users_table)
+            .where(users_table.username == username or users_table.email == email);
         
-        auto result_rows = execute(statement); // Simpler execute for non-select usually
+        auto result_rows = (*db)(select_query); // Execute query directly on connection
         if (!result_rows.empty() && result_rows.front().count > 0) {
              LOG_WARN << "CreateUser: Username or email already exists: " << username << "/" << email;
             return std::nullopt;
         }
 
         // Insert (sqlpp23 style)
-        auto insert_statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << insert_into(users_table).set(
-                   users_table.username = username,
-                   users_table.email = email,
-                   users_table.hashed_password = hashedPassword, // SQL column name
-                   users_table.created_at = now,
-                   users_table.updated_at = now);
+        auto insert_query = sqlpp::insert_into(users_table).set(
+            users_table.username = username,
+            users_table.email = email,
+            users_table.hashed_password = hashedPassword,
+            users_table.created_at = now,
+            users_table.updated_at = now);
         
-        int64_t inserted_id = execute(insert_statement); // execute for insert returns last_insert_rowid
+        (*db)(insert_query);
+        int64_t inserted_id = (*db)(sqlpp::select(sqlpp::last_insert_rowid()).from(users_table)).front().last_insert_rowid;
 
         if (inserted_id > 0) {
             comfyui_plus_backend::app::models::User createdUser;
@@ -150,13 +150,17 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::getUserByEma
     try
     {
         // Select only fields needed for the DTO, excluding hashed_password
-        auto statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << select(users_table.id, users_table.username, users_table.email, users_table.created_at, users_table.updated_at)
+        auto select_query = sqlpp::select(
+            users_table.id,
+            users_table.username,
+            users_table.email,
+            users_table.created_at,
+            users_table.updated_at)
             .from(users_table)
             .where(users_table.email == email)
             .limit(1u);
         
-        for (const auto &row : execute(statement)) // execute for select returns iterable rows
+        for (const auto &row : (*db)(select_query))
         {
             return rowToUserModel(row); // rowToUserModel should be adapted for this selected set
         }
@@ -175,12 +179,16 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::getUserByUse
     if (!db) return std::nullopt;
     try
     {
-        auto statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << select(users_table.id, users_table.username, users_table.email, users_table.created_at, users_table.updated_at)
+        auto select_query = sqlpp::select(
+            users_table.id,
+            users_table.username,
+            users_table.email,
+            users_table.created_at,
+            users_table.updated_at)
             .from(users_table)
             .where(users_table.username == username)
             .limit(1u);
-        for (const auto &row : execute(statement))
+        for (const auto &row : (*db)(select_query))
         {
             return rowToUserModel(row);
         }
@@ -199,12 +207,16 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::getUserById(
     if (!db) return std::nullopt;
     try
     {
-        auto statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << select(users_table.id, users_table.username, users_table.email, users_table.created_at, users_table.updated_at)
+        auto select_query = sqlpp::select(
+            users_table.id,
+            users_table.username,
+            users_table.email,
+            users_table.created_at,
+            users_table.updated_at)
             .from(users_table)
             .where(users_table.id == userId)
             .limit(1u);
-        for (const auto &row : execute(statement))
+        for (const auto &row : (*db)(select_query))
         {
             return rowToUserModel(row);
         }
@@ -226,13 +238,12 @@ std::optional<std::string> UserService::getHashedPasswordForLogin(const std::str
     }
     
     try {
-        auto statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << select(users_table.hashed_password)
+        auto select_query = sqlpp::select(users_table.hashed_password)
             .from(users_table)
             .where(users_table.email == emailOrUsername or users_table.username == emailOrUsername)
             .limit(1u);
         
-        for (const auto& row : execute(statement)) {
+        for (const auto& row : (*db)(select_query)) {
             return std::string(row.hashed_password); // Convert string_view to string
         }
     } catch (const std::exception& e) {
@@ -251,12 +262,11 @@ bool UserService::userExists(const std::string& username, const std::string& ema
     }
 
     try {
-        auto statement = sqlpp::statement<sqlpp::sqlite3::connection_t>(*db)
-            << select(sqlpp::count(users_table.id))
+        auto select_query = sqlpp::select(sqlpp::count(users_table.id))
             .from(users_table)
             .where(users_table.username == username or users_table.email == email);
         
-        auto result_rows = execute(statement);
+        auto result_rows = (*db)(select_query);
         if (!result_rows.empty()) {
             return result_rows.front().count > 0;
         }

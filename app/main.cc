@@ -3,7 +3,6 @@
 #include "comfyui_plus_backend/controllers/AuthController.h"
 #include "comfyui_plus_backend/controllers/WorkflowController.h"
 #include "comfyui_plus_backend/filters/JwtAuthFilter.h"
-#include "comfyui_plus_backend/services/DbConnectionPool.h"
 
 int main() {
     // Load config file

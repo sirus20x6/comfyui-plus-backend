@@ -1,5 +1,4 @@
-# comfyui-plus-backend/extern/CMakeLists.txt
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.10)
 project(ExternDependencies LANGUAGES CXX) # This project name is for this sub-CMake process
 
 include(ExternalProject)
@@ -14,27 +13,9 @@ message(STATUS "ExternDependencies (extern/CMakeLists.txt): Effective CMAKE_INST
 set(DEPS_EP_TEMP_BUILD_ROOT ${CMAKE_CURRENT_BINARY_DIR}/_ep_builds_temp) # Temporary build artifacts for deps
 message(STATUS "ExternDependencies (extern/CMakeLists.txt): Temp build root for individual EPs: ${DEPS_EP_TEMP_BUILD_ROOT}")
 
-
 find_package(SQLite3 REQUIRED) # Should find it based on system or variables passed to this CMake process
 message(STATUS "ExternDependencies (extern/CMakeLists.txt): System SQLite3 include dirs: ${SQLite3_INCLUDE_DIRS}")
 message(STATUS "ExternDependencies (extern/CMakeLists.txt): System SQLite3 libraries:    ${SQLite3_LIBRARIES}")
-
-# --- HinnantDate ---
-ExternalProject_Add(
-  extern_hinnant_date
-  PREFIX           ${DEPS_EP_TEMP_BUILD_ROOT}/hinnant_date_prefix # Temp files for this EP
-  SOURCE_DIR       ${DEPS_EP_TEMP_BUILD_ROOT}/hinnant_date_src    # Source checkout
-  BINARY_DIR       ${DEPS_EP_TEMP_BUILD_ROOT}/hinnant_date_bld    # Where HinnantDate itself builds
-  GIT_REPOSITORY   https://github.com/HowardHinnant/date.git
-  GIT_TAG          v3.0.1
-  CMAKE_ARGS       # Args for HinnantDate's own CMake process
-    # HinnantDate will install its files into: <build/install_dependencies>/hinnant_date
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/hinnant_date
-    -DBUILD_SHARED_LIBS=OFF -DENABLE_DATE_TESTING=OFF -DUSE_SYSTEM_TZ_DB=OFF -DBUILD_TZ_LIB=ON
-    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-  INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/hinnant_date # Where EP expects its installed files
-  LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
-)
 
 # --- jwt-cpp ---
 ExternalProject_Add(
@@ -52,28 +33,30 @@ ExternalProject_Add(
   LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
 )
 
-# --- sqlpp23 core ---
+# --- libsql (replacing sqlpp23) ---
+# Instead of building from source, let's use a simpler C++ wrapper for SQLite
 ExternalProject_Add(
-  extern_sqlpp23
-  PREFIX           ${DEPS_EP_TEMP_BUILD_ROOT}/sqlpp23_prefix
-  SOURCE_DIR       ${DEPS_EP_TEMP_BUILD_ROOT}/sqlpp23_src
-  BINARY_DIR       ${DEPS_EP_TEMP_BUILD_ROOT}/sqlpp23_bld
-  DEPENDS          extern_hinnant_date
-  GIT_REPOSITORY   https://github.com/rbock/sqlpp23.git
-  GIT_TAG          main # Still recommend a specific tag
+  extern_sqlite_orm
+  PREFIX           ${DEPS_EP_TEMP_BUILD_ROOT}/sqlite_orm_prefix
+  SOURCE_DIR       ${DEPS_EP_TEMP_BUILD_ROOT}/sqlite_orm_src
+  BINARY_DIR       ${DEPS_EP_TEMP_BUILD_ROOT}/sqlite_orm_bld
+  GIT_REPOSITORY   https://github.com/fnc12/sqlite_orm.git
+  GIT_TAG          v1.8.2  # Use an appropriate tag/release
   CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/sqlpp23
-    -DBUILD_SHARED_LIBS=OFF -DENABLE_TESTS=OFF -DBUILD_SQLPP23_PACKAGE=ON
-    -Ddate_DIR=${CMAKE_INSTALL_PREFIX}/hinnant_date/lib/cmake/date # Path to HinnantDate's CMake config
-    -DSQLPP23_WITH_SQLITE3=ON
-    -DSQLITE3_INCLUDE_DIR=${SQLite3_INCLUDE_DIRS}
-    -DSQLITE3_LIBRARY=${SQLite3_LIBRARIES}
-    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-  INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/sqlpp23
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/sqlite_orm
+    -DSQLITE_ORM_ENABLE_CXX_17=OFF
+    -DSQLITE_ORM_ENABLE_CXX_20=ON
+    -DSQLITE_ORM_OMITS_CODECVT=ON
+    -DSQLITE_ORM_ENABLE_JSON=OFF
+    -DBUILD_TESTING=OFF
+    -DBUILD_EXAMPLES=OFF
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+  INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/sqlite_orm
   LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
 )
 
 add_custom_target(BuildExternals ALL
-  DEPENDS extern_hinnant_date extern_jwt_cpp extern_sqlpp23
+  DEPENDS extern_jwt_cpp extern_sqlite_orm
 )
 add_library(extern_dependencies_dummy INTERFACE)

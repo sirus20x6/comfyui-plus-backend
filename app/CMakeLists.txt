@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.10)
 project(ComfyUIPlusBackend LANGUAGES CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -17,6 +17,7 @@ file(GLOB_RECURSE APP_SERVICE_SOURCES "${APP_SRC_DIR}/services/*.cc")
 file(GLOB_RECURSE APP_MODEL_SOURCES "${APP_SRC_DIR}/models/*.cc")
 file(GLOB_RECURSE APP_UTIL_SOURCES "${APP_SRC_DIR}/utils/*.cc")
 file(GLOB_RECURSE APP_FILTER_SOURCES "${APP_SRC_DIR}/filters/*.cc")
+file(GLOB_RECURSE APP_DB_SOURCES "${APP_SRC_DIR}/db/*.cc")
 
 set(APP_SOURCES
     ${APP_MAIN_SRC}
@@ -25,30 +26,21 @@ set(APP_SOURCES
     ${APP_MODEL_SOURCES}
     ${APP_UTIL_SOURCES}
     ${APP_FILTER_SOURCES}
+    ${APP_DB_SOURCES}
 )
 
 # --- Find System Packages ---
+# Find SQLite3 first to avoid conflicts with Drogon's internal finder
+find_package(SQLite3 REQUIRED)
+
+# Set a variable to prevent Drogon from finding SQLite3 again
+set(DROGON_USING_EXTERNAL_SQLITE3 TRUE CACHE INTERNAL "")
 find_package(Drogon REQUIRED)
-# find_package(SQLite3 REQUIRED) # Uncomment if SQLite3 is explicitly needed
+
 find_package(Argon2 REQUIRED)
 
 # --- Find Dependencies built by extern/CMakeLists.txt ---
 message(STATUS "app/CMakeLists.txt: CMAKE_PREFIX_PATH is: ${CMAKE_PREFIX_PATH}")
-
-# Find date package
-set(DATE_CONFIG_DIR_CANDIDATE_1 "${CMAKE_PREFIX_PATH}/hinnant_date/lib/cmake/date")
-set(DATE_CONFIG_DIR_CANDIDATE_2 "${CMAKE_PREFIX_PATH}/hinnant_date/lib64/cmake/date")
-if(EXISTS "${DATE_CONFIG_DIR_CANDIDATE_1}/dateConfig.cmake")
-    set(date_DIR "${DATE_CONFIG_DIR_CANDIDATE_1}" CACHE INTERNAL "Path to Hinnant Date CMake config")
-elseif(EXISTS "${DATE_CONFIG_DIR_CANDIDATE_2}/dateConfig.cmake")
-    set(date_DIR "${DATE_CONFIG_DIR_CANDIDATE_2}" CACHE INTERNAL "Path to Hinnant Date CMake config")
-else()
-    message(FATAL_ERROR "Could not find dateConfig.cmake. Checked:\n"
-                        "1. ${DATE_CONFIG_DIR_CANDIDATE_1}/dateConfig.cmake\n"
-                        "2. ${DATE_CONFIG_DIR_CANDIDATE_2}/dateConfig.cmake")
-endif()
-message(STATUS "app/CMakeLists.txt: Set date_DIR to ${date_DIR}")
-find_package(date REQUIRED)
 
 # Find jwt-cpp package
 set(JWT_CPP_CONFIG_DIR "${CMAKE_PREFIX_PATH}/jwt-cpp/cmake")
@@ -60,43 +52,60 @@ endif()
 message(STATUS "app/CMakeLists.txt: Set jwt-cpp_DIR to ${jwt-cpp_DIR}")
 find_package(jwt-cpp REQUIRED)
 
-# Find sqlpp23 package
-set(SQLPP23_CMAKE_FILES_PARENT_DIR "${CMAKE_PREFIX_PATH}/sqlpp23/lib/cmake/Sqlpp23")
-set(SQLPP23_POTENTIAL_NESTED_DIR "${SQLPP23_CMAKE_FILES_PARENT_DIR}/sqlpp23")
+# Find sqlite_orm
+find_package(SqliteOrm QUIET)
 
-message(STATUS "app/CMakeLists.txt: Checking for Sqlpp23Config.cmake at potential nested location: ${SQLPP23_POTENTIAL_NESTED_DIR}/Sqlpp23Config.cmake")
-message(STATUS "app/CMakeLists.txt: Checking for Sqlpp23Config.cmake at parent location: ${SQLPP23_CMAKE_FILES_PARENT_DIR}/Sqlpp23Config.cmake")
-
-if(EXISTS "${SQLPP23_POTENTIAL_NESTED_DIR}/Sqlpp23Config.cmake")
-    # The file is in the nested directory (e.g., .../Sqlpp23/sqlpp23/Sqlpp23Config.cmake)
-    set(Sqlpp23_DIR "${SQLPP23_POTENTIAL_NESTED_DIR}" CACHE INTERNAL "Path to Sqlpp23 CMake config")
-    message(STATUS "app/CMakeLists.txt: Found Sqlpp23Config.cmake in nested directory. Set Sqlpp23_DIR to ${Sqlpp23_DIR}")
-elseif(EXISTS "${SQLPP23_CMAKE_FILES_PARENT_DIR}/Sqlpp23Config.cmake")
-    # The file is directly in the parent directory (e.g. .../Sqlpp23/Sqlpp23Config.cmake)
-    set(Sqlpp23_DIR "${SQLPP23_CMAKE_FILES_PARENT_DIR}" CACHE INTERNAL "Path to Sqlpp23 CMake config")
-    message(STATUS "app/CMakeLists.txt: Found Sqlpp23Config.cmake in parent directory. Set Sqlpp23_DIR to ${Sqlpp23_DIR}")
-else()
-    message(FATAL_ERROR "Could not find Sqlpp23Config.cmake. Checked:\n"
-                        "1. ${SQLPP23_POTENTIAL_NESTED_DIR}/Sqlpp23Config.cmake\n"
-                        "2. ${SQLPP23_CMAKE_FILES_PARENT_DIR}/Sqlpp23Config.cmake")
+if(NOT SQLITE_ORM_FOUND)
+    message(STATUS "Using embedded sqlite_orm approach as fallback...")
+    # Create a source directory for the embedded header
+    set(EMBEDDED_SQLITE_ORM_DIR "${CMAKE_CURRENT_BINARY_DIR}/embedded_sqlite_orm")
+    file(MAKE_DIRECTORY "${EMBEDDED_SQLITE_ORM_DIR}/include/sqlite_orm")
+    
+    # Download the header directly
+    file(DOWNLOAD
+        "https://raw.githubusercontent.com/fnc12/sqlite_orm/master/include/sqlite_orm/sqlite_orm.h"
+        "${EMBEDDED_SQLITE_ORM_DIR}/include/sqlite_orm/sqlite_orm.h"
+        STATUS DOWNLOAD_STATUS
+        TIMEOUT 30
+        TLS_VERIFY ON
+    )
+    
+    # Check download success
+    list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
+    if(STATUS_CODE EQUAL 0)
+        set(SQLITE_ORM_INCLUDE_DIR "${EMBEDDED_SQLITE_ORM_DIR}/include")
+        set(SQLITE_ORM_FOUND TRUE)
+        
+        # Create custom target
+        add_library(SQLITE_ORM::SqliteOrm INTERFACE IMPORTED)
+        set_target_properties(SQLITE_ORM::SqliteOrm PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${SQLITE_ORM_INCLUDE_DIR}"
+        )
+        
+        message(STATUS "Successfully downloaded sqlite_orm.h to ${SQLITE_ORM_INCLUDE_DIR}")
+    else()
+        list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
+        message(FATAL_ERROR "Failed to download sqlite_orm: ${ERROR_MESSAGE}")
+    endif()
 endif()
 
-find_package(Sqlpp23 REQUIRED) # Changed to Sqlpp23 (capital S)
+message(STATUS "app/CMakeLists.txt: Found sqlite_orm include dir: ${SQLITE_ORM_INCLUDE_DIR}")
 
 # --- Target Definition ---
 add_executable(${PROJECT_NAME} ${APP_SOURCES})
 
 target_include_directories(${PROJECT_NAME}
-    SYSTEM PRIVATE "${APP_INCLUDE_DIR}"
+    SYSTEM PRIVATE
+        "${APP_INCLUDE_DIR}"
 )
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
         Drogon::Drogon
+        ${SQLite3_LIBRARIES}  # Use the variable from find_package
         Argon2::Argon2
-        date::date
         jwt-cpp::jwt-cpp
-        sqlpp23::sqlpp23 # Target name is still sqlpp23::sqlpp23
+        SQLITE_ORM::SqliteOrm
 )
 
 # --- Post-Build ---

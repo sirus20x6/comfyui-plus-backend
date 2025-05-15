@@ -1,12 +1,5 @@
-cmake_minimum_required(VERSION 3.16) # Recommended minimum for modern ExternalProject features
+cmake_minimum_required(VERSION 3.10) # Updated minimum required version
 project(ComfyUIPlusBackendSuperBuild LANGUAGES CXX)
-
-# --- Set C++ Standard for this Superbuild Project (Optional, usually not critical here) ---
-# This primarily affects any code directly in this CMakeLists.txt, if any.
-# The actual C++ standard for dependencies and the main app are set in their respective CMakeLists.txt
-# or passed via CMAKE_ARGS.
-# set(CMAKE_CXX_STANDARD 23)
-# set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # --- Set default CMAKE_BUILD_TYPE to Debug if not specified ---
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -42,8 +35,7 @@ ExternalProject_Add(dependencies_superbuild_step
         # All dependencies built by extern/CMakeLists.txt will install their public files
         # into subdirectories of this path.
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install_dependencies
-        # Pass system SQLite3 paths, as extern/CMakeLists.txt might also find_package(SQLite3)
-        # or pass these directly to sqlpp23.
+        # Pass system SQLite3 paths
         -DSQLITE3_INCLUDE_DIRS=${SQLite3_INCLUDE_DIRS}
         -DSQLITE3_LIBRARIES=${SQLite3_LIBRARIES}
     # Logging for this ExternalProject step
@@ -67,7 +59,7 @@ ExternalProject_Add(main_app_build_step
         -DCMAKE_VERBOSE_MAKEFILE=ON
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-        # Tells app/CMakeLists.txt where to find packages (HinnantDate, jwt-cpp, sqlpp23)
+        # Tells app/CMakeLists.txt where to find packages (HinnantDate, jwt-cpp, libsql)
         # that were installed by the dependencies_superbuild_step.
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/install_dependencies
     # Logging for this ExternalProject step
@@ -75,16 +67,3 @@ ExternalProject_Add(main_app_build_step
     LOG_BUILD 0
     # LOG_INSTALL 1 # Only if INSTALL_COMMAND is not ""
 )
-
-# Optional: A top-level "install" target if you want one for the whole superbuild.
-# This would typically trigger the install step of main_app_build_step, which in turn
-# would trigger the install rules in app/CMakeLists.txt.
-# To use this, main_app_build_step's INSTALL_COMMAND would need to be, e.g.,
-# INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
-# And app/CMakeLists.txt would need install(TARGETS ComfyUIPlusBackend ...)
-#
-# add_custom_target(install ALL
-#     COMMAND ${CMAKE_COMMAND} --build ${EP_BASE_DIR}/app_build --target install
-#     DEPENDS main_app_build_step
-#     COMMENT "Installing main application"
-# )

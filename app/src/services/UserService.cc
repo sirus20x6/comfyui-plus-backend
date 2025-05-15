@@ -1,12 +1,5 @@
 #include "comfyui_plus_backend/services/UserService.h"
-#include "comfyui_plus_backend/db_schema/Users.h"    // Your sqlpp23 table schema
 #include "comfyui_plus_backend/utils/PasswordUtils.h"
-#include "comfyui_plus_backend/utils/DateTimeUtils.h"
-#include <sqlpp23/sqlpp23.h>                         // Main sqlpp23 header
-#include <sqlpp23/core/query/statement.h>            // For sqlpp::statement
-#include <sqlpp23/core/clause/select.h>
-#include <sqlpp23/core/clause/insert.h>
-#include <sqlpp23/core/database/transaction.h>       // For transactions
 #include <drogon/drogon.h>
 #include <chrono>
 
@@ -17,89 +10,15 @@ namespace app
 namespace services
 {
 
-namespace {
-    // Create a single instance of the table object
-    db_schema::Users users_table{};
-}
-
 UserService::UserService()
+    : dbManager_(db::DatabaseManager::getInstance())
 {
-    try {
-        // Get database path from Drogon config
-        auto drogonDbClient = drogon::app().getDbClient("default");
-        const auto& connInfo = drogonDbClient->connectionInfo();
-
-        dbConfig_.path_to_database = connInfo.dbname();
-        dbConfig_.flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
-        
-        // Enable SQL tracing in debug mode
-        if (trantor::Logger::logLevel() == trantor::Logger::LogLevel::kDebug) {
-            dbConfig_.debug = sqlpp::debug_logger{
-                {sqlpp::log_category::all},
-                [](const std::string& msg) { LOG_DEBUG << "[sqlpp23] " << msg; }
-            };
-        }
-        
-        // Initialize the connection pool
-        connectionPool_ = std::make_shared<sqlpp::sqlite3::connection_pool>(dbConfig_, INITIAL_POOL_SIZE);
-        LOG_INFO << "UserService: Database connection pool initialized with " << INITIAL_POOL_SIZE << " connections";
-
-    } catch (const std::exception& e) {
-        LOG_ERROR << "Failed to initialize UserService DB config: " << e.what();
-    }
+    LOG_DEBUG << "UserService constructed";
 }
 
 UserService::~UserService()
 {
-    // The connection pool will be automatically destroyed when the shared_ptr is destroyed.
-    // This is included for clarity and potential future cleanup operations.
-    LOG_INFO << "UserService: Shutting down DB connection pool";
-}
-
-std::shared_ptr<sqlpp::sqlite3::connection> UserService::getDbConnection()
-{
-    try {
-        // Get a connection from the pool
-        return connectionPool_->get();
-    } catch (const sqlpp::exception& e) {
-        LOG_ERROR << "Failed to get SQLite connection from pool (sqlpp error): " << e.what();
-        return nullptr;
-    } catch (const std::exception& e) {
-        LOG_ERROR << "Failed to get SQLite connection from pool: " << e.what();
-        return nullptr;
-    }
-}
-
-template<typename RowType>
-comfyui_plus_backend::app::models::User UserService::rowToUserModel(const RowType& row) {
-    comfyui_plus_backend::app::models::User userModel;
-
-    // Handle ID with optional checking
-    if constexpr (requires { row.id; }) {
-        if (row.id) {
-            userModel.setId(*row.id);
-        }
-    }
-
-    // Handle string fields - convert string_view to std::string explicitly
-    if constexpr (requires { row.username; }) {
-        userModel.setUsername(std::string(row.username.data(), row.username.size()));
-    }
-    
-    if constexpr (requires { row.email; }) {
-        userModel.setEmail(std::string(row.email.data(), row.email.size()));
-    }
-    
-    // Handle date fields using the utility class
-    if constexpr (requires { row.created_at; }) {
-        userModel.setCreatedAt(utils::DateTimeUtils::nullableToDate(row.created_at));
-    }
-    
-    if constexpr (requires { row.updated_at; }) {
-        userModel.setUpdatedAt(utils::DateTimeUtils::nullableToDate(row.updated_at));
-    }
-    
-    return userModel;
+    LOG_DEBUG << "UserService destroyed";
 }
 
 std::optional<comfyui_plus_backend::app::models::User> UserService::createUser(
@@ -107,9 +26,8 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::createUser(
     const std::string &email,
     const std::string &plainPassword)
 {
-    auto db = getDbConnection();
-    if (!db) {
-        LOG_ERROR << "CreateUser: Failed to get DB connection.";
+    if (!dbManager_.isInitialized()) {
+        LOG_ERROR << "CreateUser: Database not initialized";
         return std::nullopt;
     }
 
@@ -119,278 +37,228 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::createUser(
         return std::nullopt;
     }
 
+    // Get the current time as an ISO string
     auto now = std::chrono::system_clock::now();
+    auto nowTime = std::chrono::system_clock::to_time_t(now);
+    char timeStr[100];
+    std::strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", std::localtime(&nowTime));
+    std::string timestamp(timeStr);
 
-    try
-    {
-        // Start a transaction for atomicity
-        auto tx = sqlpp::start_transaction(*db);
-        
-        // Prepare a statement to check existence (using named parameters)
-        auto userExistsStmt = db->prepare(
-            sqlpp::select(sqlpp::count(users_table.id))
-                .from(users_table)
-                .where(users_table.username == parameter(users_table.username) or 
-                       users_table.email == parameter(users_table.email))
-        );
-        
-        // Set parameters and execute
-        userExistsStmt.params.username = username;
-        userExistsStmt.params.email = email;
-        
-        auto existsResult = (*db)(userExistsStmt);
-        if (!existsResult.empty() && existsResult.front().count > 0) {
+    try {
+        auto& storage = dbManager_.getStorage();
+
+        // Check if user already exists
+        auto userExists = this->userExists(username, email);
+        if (userExists) {
             LOG_WARN << "CreateUser: Username or email already exists: " << username << "/" << email;
             return std::nullopt;
         }
 
-        // Prepare insert statement (using parameters for all values)
-        auto insertStmt = db->prepare(
-            sqlpp::insert_into(users_table).set(
-                users_table.username = parameter(users_table.username),
-                users_table.email = parameter(users_table.email),
-                users_table.hashed_password = parameter(users_table.hashed_password),
-                users_table.created_at = parameter(users_table.created_at),
-                users_table.updated_at = parameter(users_table.updated_at)
-            )
-        );
-        
-        // Set parameters
-        insertStmt.params.username = username;
-        insertStmt.params.email = email;
-        insertStmt.params.hashed_password = hashedPassword;
-        insertStmt.params.created_at = now;
-        insertStmt.params.updated_at = now;
-        
-        // Execute the insert
-        (*db)(insertStmt);
-        
-        // Get the last insert ID using the documented method
-        int64_t inserted_id = db->last_insert_id();
-        
-        if (inserted_id > 0) {
-            // Commit the transaction
-            tx.commit();
+        // Create the database user model
+        db::models::User dbUser;
+        dbUser.username = username;
+        dbUser.email = email;
+        dbUser.hashedPassword = hashedPassword;
+        dbUser.createdAt = timestamp;
+        dbUser.updatedAt = timestamp;
+
+        // Start a transaction
+        storage.transaction([&] {
+            // Insert the user
+            auto insertedId = storage.insert(dbUser);
             
-            // Create and return the user model
-            comfyui_plus_backend::app::models::User createdUser;
-            createdUser.setId(inserted_id);
-            createdUser.setUsername(username);
-            createdUser.setEmail(email);
-            createdUser.setCreatedAt(trantor::Date(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                         now.time_since_epoch()).count()));
-            createdUser.setUpdatedAt(trantor::Date(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                         now.time_since_epoch()).count()));
-            return createdUser;
-        } else {
-            LOG_ERROR << "User insertion failed for " << username << ", returned ID: " << inserted_id;
-            // No need to explicitly rollback - destructor will handle it
-            return std::nullopt;
-        }
+            // Retrieve the inserted user to verify
+            auto users = storage.get_all<db::models::User>(sqlite_orm::where(sqlite_orm::c(&db::models::User::id) == insertedId));
+            
+            if (users.empty()) {
+                LOG_ERROR << "User insertion failed for " << username;
+                return false; // Rolls back the transaction
+            }
+            
+            // Set the ID field of our dbUser object for conversion later
+            dbUser.id = insertedId;
+            return true; // Commits the transaction
+        });
+
+        // Convert to API model and return
+        return dbModelToUserModel(dbUser);
     }
-    catch (const sqlpp::exception &e)
-    {
-        LOG_ERROR << "SQL error creating user " << username << ": " << e.what();
-        return std::nullopt;
-    }
-    catch (const std::exception &e)
-    {
+    catch (const std::exception &e) {
         LOG_ERROR << "Error creating user " << username << ": " << e.what();
         return std::nullopt;
     }
 }
 
-// getUserByEmail (returns DTO safe for client)
 std::optional<comfyui_plus_backend::app::models::User> UserService::getUserByEmail(const std::string &email)
 {
-    auto db = getDbConnection();
-    if (!db) return std::nullopt;
+    if (!dbManager_.isInitialized()) {
+        LOG_ERROR << "getUserByEmail: Database not initialized";
+        return std::nullopt;
+    }
 
-    try
-    {
-        // Prepare a parameterized statement
-        auto stmt = db->prepare(
-            sqlpp::select(
-                users_table.id,
-                users_table.username,
-                users_table.email,
-                users_table.created_at,
-                users_table.updated_at)
-                .from(users_table)
-                .where(users_table.email == parameter(users_table.email))
-                .limit(1u)
+    try {
+        auto& storage = dbManager_.getStorage();
+        
+        // Query for user by email
+        auto users = storage.get_all<db::models::User>(
+            sqlite_orm::where(sqlite_orm::c(&db::models::User::email) == email),
+            sqlite_orm::limit(1)
         );
         
-        // Set parameter and execute
-        stmt.params.email = email;
-        auto result = (*db)(stmt);
-        
-        if (!result.empty()) {
-            return rowToUserModel(result.front());
+        if (users.empty()) {
+            return std::nullopt;
         }
+        
+        // Convert to API model and return
+        return dbModelToUserModel(users.front());
     }
-    catch (const sqlpp::exception &e)
-    {
-        LOG_ERROR << "SQL error getting user by email " << email << ": " << e.what();
-    }
-    catch (const std::exception &e)
-    {
+    catch (const std::exception &e) {
         LOG_ERROR << "Error getting user by email " << email << ": " << e.what();
+        return std::nullopt;
     }
-    return std::nullopt;
 }
 
-// getUserByUsername (returns DTO safe for client)
 std::optional<comfyui_plus_backend::app::models::User> UserService::getUserByUsername(const std::string &username)
 {
-    auto db = getDbConnection();
-    if (!db) return std::nullopt;
-    try
-    {
-        // Prepare a parameterized statement
-        auto stmt = db->prepare(
-            sqlpp::select(
-                users_table.id,
-                users_table.username,
-                users_table.email,
-                users_table.created_at,
-                users_table.updated_at)
-                .from(users_table)
-                .where(users_table.username == parameter(users_table.username))
-                .limit(1u)
+    if (!dbManager_.isInitialized()) {
+        LOG_ERROR << "getUserByUsername: Database not initialized";
+        return std::nullopt;
+    }
+
+    try {
+        auto& storage = dbManager_.getStorage();
+        
+        // Query for user by username
+        auto users = storage.get_all<db::models::User>(
+            sqlite_orm::where(sqlite_orm::c(&db::models::User::username) == username),
+            sqlite_orm::limit(1)
         );
         
-        // Set parameter and execute
-        stmt.params.username = username;
-        auto result = (*db)(stmt);
-        
-        if (!result.empty()) {
-            return rowToUserModel(result.front());
+        if (users.empty()) {
+            return std::nullopt;
         }
+        
+        // Convert to API model and return
+        return dbModelToUserModel(users.front());
     }
-    catch (const sqlpp::exception &e)
-    {
-        LOG_ERROR << "SQL error getting user by username " << username << ": " << e.what();
-    }
-    catch (const std::exception &e)
-    {
+    catch (const std::exception &e) {
         LOG_ERROR << "Error getting user by username " << username << ": " << e.what();
+        return std::nullopt;
     }
-    return std::nullopt;
 }
 
-// getUserById (returns DTO safe for client)
 std::optional<comfyui_plus_backend::app::models::User> UserService::getUserById(int64_t userId)
 {
-    auto db = getDbConnection();
-    if (!db) return std::nullopt;
-    try
-    {
-        // Prepare a parameterized statement
-        auto stmt = db->prepare(
-            sqlpp::select(
-                users_table.id,
-                users_table.username,
-                users_table.email,
-                users_table.created_at,
-                users_table.updated_at)
-                .from(users_table)
-                .where(users_table.id == parameter(users_table.id))
-                .limit(1u)
-        );
+    if (!dbManager_.isInitialized()) {
+        LOG_ERROR << "getUserById: Database not initialized";
+        return std::nullopt;
+    }
+
+    try {
+        auto& storage = dbManager_.getStorage();
         
-        // Set parameter and execute
-        stmt.params.id = userId;
-        auto result = (*db)(stmt);
+        // Query for user by ID
+        auto userOpt = storage.get_optional<db::models::User>(userId);
         
-        if (!result.empty()) {
-            return rowToUserModel(result.front());
+        if (!userOpt.has_value()) {
+            return std::nullopt;
         }
+        
+        // Convert to API model and return
+        return dbModelToUserModel(userOpt.value());
     }
-    catch (const sqlpp::exception &e)
-    {
-        LOG_ERROR << "SQL error getting user by ID " << userId << ": " << e.what();
-    }
-    catch (const std::exception &e)
-    {
+    catch (const std::exception &e) {
         LOG_ERROR << "Error getting user by ID " << userId << ": " << e.what();
+        return std::nullopt;
     }
-    return std::nullopt;
 }
 
-// Implementation of getHashedPasswordForLogin
 std::optional<std::string> UserService::getHashedPasswordForLogin(const std::string& emailOrUsername)
 {
-    auto db = getDbConnection();
-    if (!db) {
-        LOG_ERROR << "getHashedPasswordForLogin: Failed to get DB connection.";
+    if (!dbManager_.isInitialized()) {
+        LOG_ERROR << "getHashedPasswordForLogin: Database not initialized";
         return std::nullopt;
     }
     
     try {
-        // Prepare a parameterized statement using dynamic conditions
-        // We'll use the same parameter twice for both email and username checks
-        auto stmt = db->prepare(
-            sqlpp::select(users_table.hashed_password)
-                .from(users_table)
-                .where(sqlpp::dynamic(true, users_table.email == parameter(users_table.email) or 
-                                      users_table.username == parameter(users_table.username)))
-                .limit(1u)
+        auto& storage = dbManager_.getStorage();
+        
+        // First try by email
+        auto usersByEmail = storage.get_all<db::models::User>(
+            sqlite_orm::where(sqlite_orm::c(&db::models::User::email) == emailOrUsername),
+            sqlite_orm::limit(1)
         );
         
-        // Set parameters and execute
-        stmt.params.email = emailOrUsername;
-        stmt.params.username = emailOrUsername;
-        
-        auto result = (*db)(stmt);
-        
-        if (!result.empty()) {
-            return std::string(result.front().hashed_password.data(), 
-                               result.front().hashed_password.size());
+        // If not found by email, try by username
+        if (usersByEmail.empty()) {
+            auto usersByUsername = storage.get_all<db::models::User>(
+                sqlite_orm::where(sqlite_orm::c(&db::models::User::username) == emailOrUsername),
+                sqlite_orm::limit(1)
+            );
+            
+            if (usersByUsername.empty()) {
+                return std::nullopt;
+            }
+            
+            return usersByUsername.front().hashedPassword;
         }
-    } catch (const sqlpp::exception& e) {
-        LOG_ERROR << "SQL error getting hashed password for " << emailOrUsername << ": " << e.what();
-    } catch (const std::exception& e) {
-        LOG_ERROR << "Error getting hashed password for " << emailOrUsername << ": " << e.what();
+        
+        return usersByEmail.front().hashedPassword;
     }
-    
-    return std::nullopt;
+    catch (const std::exception &e) {
+        LOG_ERROR << "Error getting hashed password for " << emailOrUsername << ": " << e.what();
+        return std::nullopt;
+    }
 }
 
 bool UserService::userExists(const std::string& username, const std::string& email)
 {
-    auto db = getDbConnection();
-    if (!db) {
-        LOG_ERROR << "userExists: Failed to get DB connection.";
+    if (!dbManager_.isInitialized()) {
+        LOG_ERROR << "userExists: Database not initialized";
         return true; // Safer to return true if we can't check
     }
 
     try {
-        // Prepare a parameterized statement
-        auto stmt = db->prepare(
-            sqlpp::select(sqlpp::count(users_table.id))
-                .from(users_table)
-                .where(users_table.username == parameter(users_table.username) or 
-                       users_table.email == parameter(users_table.email))
+        auto& storage = dbManager_.getStorage();
+        
+        // Check if a user with the given username or email exists
+        auto count = storage.count<db::models::User>(
+            sqlite_orm::where(
+                sqlite_orm::c(&db::models::User::username) == username
+                or sqlite_orm::c(&db::models::User::email) == email
+            )
         );
         
-        // Set parameters and execute
-        stmt.params.username = username;
-        stmt.params.email = email;
-        
-        auto result = (*db)(stmt);
-        
-        if (!result.empty()) {
-            return result.front().count > 0;
-        }
-    } catch (const sqlpp::exception& e) {
-        LOG_ERROR << "SQL error in userExists check: " << e.what();
-        return true; // Safer to return true on error
-    } catch (const std::exception& e) {
+        return count > 0;
+    }
+    catch (const std::exception &e) {
         LOG_ERROR << "Error in userExists check: " << e.what();
         return true; // Safer to return true on error
     }
-    return false;
+}
+
+comfyui_plus_backend::app::models::User UserService::dbModelToUserModel(const db::models::User& dbUser)
+{
+    comfyui_plus_backend::app::models::User userModel;
+    
+    // Convert db model to API model
+    if (dbUser.id.has_value()) {
+        userModel.setId(dbUser.id.value());
+    }
+    
+    userModel.setUsername(dbUser.username);
+    userModel.setEmail(dbUser.email);
+    
+    // Don't copy the hashed password to the API model for security
+    
+    // Convert string timestamps to trantor::Date
+    trantor::Date createdDate = trantor::Date::fromDbStringLocal(dbUser.createdAt);
+    trantor::Date updatedDate = trantor::Date::fromDbStringLocal(dbUser.updatedAt);
+    
+    userModel.setCreatedAt(createdDate);
+    userModel.setUpdatedAt(updatedDate);
+    
+    return userModel;
 }
 
 } // namespace services

@@ -21,11 +21,10 @@ ComfyUI Plus aims to be a comprehensive, self-hostable platform for the AI art c
 *   **Programming Language:** C++ (targeting C++23)
 *   **Web Framework:** [Drogon](https://github.com/drogonframework/drogon) (High-performance C++ HTTP framework)
 *   **Database:** SQLite (Initial phase, self-contained)
-*   **Database Access/ORM:** [sqlpp23](https://github.com/rbock/sqlpp23) (Type-safe SQL EDSL for C++)
+*   **Database Access/ORM:** [sqlite_orm](https://github.com/fnc12/sqlite_orm) (Header-only ORM for SQLite)
 *   **Authentication:** JSON Web Tokens (JWT)
     *   **JWT Library:** [jwt-cpp](https://github.com/Thalhammer/jwt-cpp)
 *   **Password Hashing:** Argon2 (via `libargon2`)
-*   **Date/Time Utilities:** [Hinnant's date library](https://github.com/HowardHinnant/date) (often a dependency of sqlpp23)
 *   **Build System:** CMake (using a Superbuild pattern for dependencies)
 *   **Object Storage (Future/Optional Self-Hosted):** MinIO (S3-compatible, for avatars, thumbnails, etc.)
 
@@ -36,9 +35,8 @@ This section tracks our development journey.
 ### Phase 0: Project Setup & Core Dependencies
 *   [x] Initial C++ Drogon project structure defined.
 *   [x] CMake Superbuild setup for managing external dependencies:
-    *   [x] Hinnant's date library
     *   [x] jwt-cpp
-    *   [x] sqlpp23 (with SQLite3 connector support)
+    *   [x] sqlite_orm
     *   [x] Argon2 (system library)
     *   [x] SQLite3 (system library)
 *   [ ] ~~Containerization (Docker)~~ (Deferred)
@@ -49,9 +47,10 @@ This section tracks our development journey.
 *   **Todos:**
     *   [x] `PasswordUtils` for hashing and verification (using Argon2).
     *   [x] `JwtService` for JWT generation and validation.
-    *   [x] `UserService` (sqlpp23):
-        *   [x] User schema definition for sqlpp23 (`db_schema/Users.h`).
-        *   [x] Database table creation for users.
+    *   [x] `DatabaseManager` for database connections and thread-safety.
+    *   [x] Database models and schema setup with sqlite_orm.
+    *   [x] `UserService` for user management:
+        *   [x] User model creation
         *   [x] `createUser` method.
         *   [x] `getUserByEmail`, `getUserByUsername`, `getUserById` methods.
         *   [x] `getHashedPasswordForLogin` method.
@@ -66,7 +65,7 @@ This section tracks our development journey.
 *   **Goal:** Store and retrieve workflow definitions (nodes, connections, metadata).
 *   **Status:** Not Started
 *   **Todos:**
-    *   [ ] Workflow database schema definition (sqlpp23).
+    *   [x] Workflow database model and schema definition
     *   [ ] `WorkflowService`:
         *   [ ] `createWorkflow`
         *   [ ] `getWorkflowById`
@@ -100,7 +99,7 @@ This section tracks our development journey.
 
 1.  **Prerequisites:**
     *   C++ Compiler (supporting C++23, e.g., GCC 13+, Clang 16+)
-    *   CMake (version 3.16 or newer recommended)
+    *   CMake (version 3.10 or newer recommended)
     *   Git
     *   `libsqlite3-dev` (SQLite3 development headers and library)
     *   `libargon2-0-dev` (Argon2 development headers and library)
@@ -133,6 +132,48 @@ This section tracks our development journey.
 *   `POST /auth/register` - Register a new user.
 *   `POST /auth/login` - Log in an existing user, returns JWT.
 *   `GET /auth/me` - (Protected) Get current user's profile.
+
+## Database Structure
+
+The application uses SQLite with the sqlite_orm library to manage the following tables:
+
+1. **users**
+   - id (PRIMARY KEY)
+   - username (UNIQUE)
+   - email (UNIQUE)
+   - hashed_password
+   - created_at
+   - updated_at
+
+2. **workflows**
+   - id (PRIMARY KEY)
+   - user_id (FOREIGN KEY → users.id)
+   - name
+   - description
+   - json_data
+   - thumbnail_path
+   - created_at
+   - updated_at
+   - is_public
+
+3. **tags**
+   - id (PRIMARY KEY)
+   - name (UNIQUE)
+
+4. **workflow_tags** (junction table)
+   - id (PRIMARY KEY)
+   - workflow_id (FOREIGN KEY → workflows.id)
+   - tag_id (FOREIGN KEY → tags.id)
+   - UNIQUE constraint on (workflow_id, tag_id)
+
+## Moving from sqlpp23 to sqlite_orm
+
+Initially, this project used sqlpp23 for database access. We have since migrated to sqlite_orm, which offers:
+
+1. **Simplified Integration**: Header-only library with no code generation required
+2. **Modern C++ Interface**: Clean API with strong typing
+3. **Thread Safety**: Connection per thread model for SQLite concurrency
+4. **Seamless Transactions**: Easy transaction management
 
 ## Contribution
 

@@ -1,8 +1,6 @@
 #pragma once
 
-#include "comfyui_plus_backend/db/models.h"
-#include "comfyui_plus_backend/db/schema.h"
-#include <sqlite_orm/sqlite_orm.h>
+#include "comfyui_plus_backend/db/simple_storage.h"
 #include <string>
 #include <memory>
 #include <mutex>

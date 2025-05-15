@@ -32,17 +32,16 @@ class AuthController final : public drogon::HttpController<AuthController>
     // ADD_METHOD_TO(AuthController::getCurrentUser, "/auth/me", {drogon::HttpMethod::Get}, "JwtAuthFilter");
     METHOD_LIST_END
 
-    // Endpoint handler declarations
-    // Using drogon::async_func::Task for asynchronous operations
-    drogon::async_func::Task<void> handleRegister(const drogon::HttpRequestPtr &req,
-                                                  std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+    // Endpoint handler declarations - using standard callbacks instead of async_func
+    void handleRegister(const drogon::HttpRequestPtr &req,
+                        std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
-    drogon::async_func::Task<void> handleLogin(const drogon::HttpRequestPtr &req,
-                                               std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+    void handleLogin(const drogon::HttpRequestPtr &req,
+                     std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
     // Example for a protected route later:
-    // drogon::async_func::Task<void> getCurrentUser(const drogon::HttpRequestPtr &req,
-    //                                               std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+    // void getCurrentUser(const drogon::HttpRequestPtr &req,
+    //                     std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
   private:
     std::shared_ptr<cupb_services::AuthService> authService_;

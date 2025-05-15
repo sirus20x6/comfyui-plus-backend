@@ -66,9 +66,7 @@ Storage& DatabaseManager::getStorage() {
     }
     
     // For multithreaded access, use thread-local storage
-    if (std::this_thread::get_id() != std::thread::id() && 
-        std::this_thread::get_id() != std::thread::id()) {
-        
+    if (std::this_thread::get_id() != std::thread::id()) {
         // Initialize thread-local storage if not already done
         if (!threadLocalData_.storage) {
             LOG_DEBUG << "Creating thread-local database connection for thread ID: " 

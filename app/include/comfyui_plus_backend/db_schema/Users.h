@@ -1,12 +1,15 @@
-#include <sqlpp23/core/basic/table.h>
+#pragma once
+
+#include <sqlpp23/sqlite3/sqlite3.h>
 #include <sqlpp23/core/basic/column.h>
+#include <sqlpp23/core/type_traits.h>
 
 namespace comfyui_plus_backend::app::schema {
 
 struct Users {
   struct Id {
     static constexpr auto name  = "id";
-    using value_type            = sqlpp::bigint;                // 64‑bit
+    using value_type            = sqlpp::integral;  // Use integral instead of bigint
     static constexpr auto flags = sqlpp::column_flags::primary_key
                                 | sqlpp::column_flags::auto_increment;
   };
@@ -43,7 +46,8 @@ struct Users {
     static constexpr auto flags = sqlpp::column_flags::default_;
   };
 
-  using _column_list = sqlpp::type_vector<
+  // Using sqlpp::meta::type_vector instead of sqlpp::type_vector
+  using _column_list = sqlpp::meta::type_vector
       Id, Username, Email, HashedPassword, CreatedAt, UpdatedAt>;
   static constexpr auto name = "users";
 };

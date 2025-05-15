@@ -1,56 +1,109 @@
-cmake_minimum_required(VERSION 3.5...3.27)
-project(ExternSuperBuild LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.16)
+project(ComfyUIPlusBackend LANGUAGES CXX)
 
-include(ExternalProject)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# System SQLite3 (for connector usage)
-find_package(SQLite3 REQUIRED)
-message(STATUS "ExternSuperBuild: SQLite3 include dirs: ${SQLite3_INCLUDE_DIRS}")
-message(STATUS "ExternSuperBuild: SQLite3 libraries:    ${SQLite3_LIBRARIES}")
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# HinnantDate (date utility library)
-ExternalProject_Add(
-  extern_hinnant_date
-  GIT_REPOSITORY   https://github.com/HowardHinnant/date.git
-  GIT_TAG          v3.0.1
-  CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install/hinnant_date
-    -DBUILD_SHARED_LIBS=OFF
-    -DENABLE_DATE_TESTING=OFF
-    -DUSE_SYSTEM_TZ_DB=OFF
-    -DBUILD_TZ_LIB=ON
+# --- Source Files & Include Directories ---
+set(APP_MAIN_SRC "${CMAKE_CURRENT_SOURCE_DIR}/main.cc")
+set(APP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(APP_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+file(GLOB_RECURSE APP_CONTROLLER_SOURCES "${APP_SRC_DIR}/controllers/*.cc")
+file(GLOB_RECURSE APP_SERVICE_SOURCES "${APP_SRC_DIR}/services/*.cc")
+file(GLOB_RECURSE APP_MODEL_SOURCES "${APP_SRC_DIR}/models/*.cc")
+file(GLOB_RECURSE APP_UTIL_SOURCES "${APP_SRC_DIR}/utils/*.cc")
+file(GLOB_RECURSE APP_FILTER_SOURCES "${APP_SRC_DIR}/filters/*.cc")
+
+set(APP_SOURCES
+    ${APP_MAIN_SRC}
+    ${APP_CONTROLLER_SOURCES}
+    ${APP_SERVICE_SOURCES}
+    ${APP_MODEL_SOURCES}
+    ${APP_UTIL_SOURCES}
+    ${APP_FILTER_SOURCES}
 )
 
-# jwt-cpp (JSON Web Tokens)
-ExternalProject_Add(
-  extern_jwt_cpp
-  GIT_REPOSITORY   https://github.com/Thalhammer/jwt-cpp.git
-  GIT_TAG          v0.7.0
-  CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install/jwt-cpp
-    -DBUILD_SHARED_LIBS=OFF
-    -DJWT_BUILD_EXAMPLES=OFF
-    -DJWT_BUILD_TESTS=OFF
+# --- Find System Packages ---
+find_package(Drogon REQUIRED)
+# find_package(SQLite3 REQUIRED) # Uncomment if SQLite3 is explicitly needed
+find_package(Argon2 REQUIRED)
+
+# --- Find Dependencies built by extern/CMakeLists.txt ---
+message(STATUS "app/CMakeLists.txt: CMAKE_PREFIX_PATH is: ${CMAKE_PREFIX_PATH}")
+
+# Find date package
+set(DATE_CONFIG_DIR_CANDIDATE_1 "${CMAKE_PREFIX_PATH}/hinnant_date/lib/cmake/date")
+set(DATE_CONFIG_DIR_CANDIDATE_2 "${CMAKE_PREFIX_PATH}/hinnant_date/lib64/cmake/date")
+if(EXISTS "${DATE_CONFIG_DIR_CANDIDATE_1}/dateConfig.cmake")
+    set(date_DIR "${DATE_CONFIG_DIR_CANDIDATE_1}" CACHE INTERNAL "Path to Hinnant Date CMake config")
+elseif(EXISTS "${DATE_CONFIG_DIR_CANDIDATE_2}/dateConfig.cmake")
+    set(date_DIR "${DATE_CONFIG_DIR_CANDIDATE_2}" CACHE INTERNAL "Path to Hinnant Date CMake config")
+else()
+    message(FATAL_ERROR "Could not find dateConfig.cmake. Checked:\n"
+                        "1. ${DATE_CONFIG_DIR_CANDIDATE_1}/dateConfig.cmake\n"
+                        "2. ${DATE_CONFIG_DIR_CANDIDATE_2}/dateConfig.cmake")
+endif()
+message(STATUS "app/CMakeLists.txt: Set date_DIR to ${date_DIR}")
+find_package(date REQUIRED)
+
+# Find jwt-cpp package
+set(JWT_CPP_CONFIG_DIR "${CMAKE_PREFIX_PATH}/jwt-cpp/cmake")
+if(EXISTS "${JWT_CPP_CONFIG_DIR}/jwt-cpp-config.cmake")
+    set(jwt-cpp_DIR "${JWT_CPP_CONFIG_DIR}" CACHE INTERNAL "Path to jwt-cpp CMake config")
+else()
+    message(FATAL_ERROR "jwt-cpp-config.cmake not found under ${JWT_CPP_CONFIG_DIR}")
+endif()
+message(STATUS "app/CMakeLists.txt: Set jwt-cpp_DIR to ${jwt-cpp_DIR}")
+find_package(jwt-cpp REQUIRED)
+
+# Find sqlpp23 package
+set(SQLPP23_CMAKE_FILES_PARENT_DIR "${CMAKE_PREFIX_PATH}/sqlpp23/lib/cmake/Sqlpp23")
+set(SQLPP23_POTENTIAL_NESTED_DIR "${SQLPP23_CMAKE_FILES_PARENT_DIR}/sqlpp23")
+
+message(STATUS "app/CMakeLists.txt: Checking for Sqlpp23Config.cmake at potential nested location: ${SQLPP23_POTENTIAL_NESTED_DIR}/Sqlpp23Config.cmake")
+message(STATUS "app/CMakeLists.txt: Checking for Sqlpp23Config.cmake at parent location: ${SQLPP23_CMAKE_FILES_PARENT_DIR}/Sqlpp23Config.cmake")
+
+if(EXISTS "${SQLPP23_POTENTIAL_NESTED_DIR}/Sqlpp23Config.cmake")
+    # The file is in the nested directory (e.g., .../Sqlpp23/sqlpp23/Sqlpp23Config.cmake)
+    set(Sqlpp23_DIR "${SQLPP23_POTENTIAL_NESTED_DIR}" CACHE INTERNAL "Path to Sqlpp23 CMake config")
+    message(STATUS "app/CMakeLists.txt: Found Sqlpp23Config.cmake in nested directory. Set Sqlpp23_DIR to ${Sqlpp23_DIR}")
+elseif(EXISTS "${SQLPP23_CMAKE_FILES_PARENT_DIR}/Sqlpp23Config.cmake")
+    # The file is directly in the parent directory (e.g. .../Sqlpp23/Sqlpp23Config.cmake)
+    set(Sqlpp23_DIR "${SQLPP23_CMAKE_FILES_PARENT_DIR}" CACHE INTERNAL "Path to Sqlpp23 CMake config")
+    message(STATUS "app/CMakeLists.txt: Found Sqlpp23Config.cmake in parent directory. Set Sqlpp23_DIR to ${Sqlpp23_DIR}")
+else()
+    message(FATAL_ERROR "Could not find Sqlpp23Config.cmake. Checked:\n"
+                        "1. ${SQLPP23_POTENTIAL_NESTED_DIR}/Sqlpp23Config.cmake\n"
+                        "2. ${SQLPP23_CMAKE_FILES_PARENT_DIR}/Sqlpp23Config.cmake")
+endif()
+
+find_package(Sqlpp23 REQUIRED) # Changed to Sqlpp23 (capital S)
+
+# --- Target Definition ---
+add_executable(${PROJECT_NAME} ${APP_SOURCES})
+
+target_include_directories(${PROJECT_NAME}
+    SYSTEM PRIVATE "${APP_INCLUDE_DIR}"
 )
 
-# sqlpp23 core (C++23 SQL EDSL with built-in connectors)
-ExternalProject_Add(
-  extern_sqlpp23
-  GIT_REPOSITORY   https://github.com/rbock/sqlpp23.git
-  GIT_TAG          main
-  CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install/sqlpp23
-    -DBUILD_SHARED_LIBS=OFF
-    -DENABLE_TESTS=OFF
-    -DENABLE_BUILD_TESTING=OFF
-    -DBUILD_TESTING=OFF
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE
+        Drogon::Drogon
+        Argon2::Argon2
+        date::date
+        jwt-cpp::jwt-cpp
+        sqlpp23::sqlpp23 # Target name is still sqlpp23::sqlpp23
 )
 
-# Aggregate target to build all externals
-add_custom_target(BuildExternals ALL
-  DEPENDS
-    extern_hinnant_date
-    extern_jwt_cpp
-    extern_sqlpp23
+# --- Post-Build ---
+add_custom_command(
+    TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/config.json"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config.json"
+    COMMENT "Copying config.json to app build directory"
 )
-add_library(superbuild_dummy INTERFACE)

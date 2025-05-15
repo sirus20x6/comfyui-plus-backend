@@ -1,7 +1,7 @@
 #pragma once
 
-#include "comfyui_plus_backend/models/User.h" // Your Drogon-style User model (for data transfer)
-#include <sqlpp11/sqlite3/sqlite3.h>          // For sqlpp::sqlite3::connection
+#include "comfyui_plus_backend/models/User.h" // Your Drogon-style User model (DTO)
+#include <sqlpp23/sqlite3_connection.h>       // <<< CHANGED: For sqlpp23 sqlite3 connection
 #include <string>
 #include <optional>
 #include <memory> // For std::shared_ptr
@@ -16,15 +16,16 @@ namespace services
 class UserService
 {
   public:
-    UserService(); // Constructor, could initialize db connection manager
+    UserService(); // Constructor to initialize dbConfig_
 
-    // Creates a user and returns the created user model, or std::nullopt on failure
+    // Creates a user and returns the created user model (DTO), or std::nullopt on failure.
     // The password provided here is the plain text password.
     std::optional<models::User> createUser(
         const std::string &username,
         const std::string &email,
         const std::string &plainPassword);
 
+    // These methods return the User DTO (safe for client)
     std::optional<models::User> getUserByEmail(const std::string &email);
     std::optional<models::User> getUserByUsername(const std::string &username);
     std::optional<models::User> getUserById(int64_t userId);
@@ -32,17 +33,23 @@ class UserService
     // Helper to check if username or email already exists
     bool userExists(const std::string& username, const std::string& email);
 
+    // Internal method for AuthService to get the hashed password for verification.
+    // This should not be part of the public API of UserService if possible,
+    // or should return a very specific internal struct.
+    // For now, keeping it simple for AuthService to call.
+    std::optional<std::string> getHashedPasswordForLogin(const std::string& emailOrUsername);
+
 
   private:
     // Helper function to get a database connection.
-    // In a real app, this would be more sophisticated (e.g., connection pool).
-    // This could also be a member variable initialized in the constructor.
     std::shared_ptr<sqlpp::sqlite3::connection> getDbConnection();
 
-    // Converts an sqlpp11 row to your application's User model
-    models::User rowToUserModel(const auto& row); // Using 'auto' for template-like behavior
+    // Converts an sqlpp23 result row to your application's User model DTO
+    // The RowType will depend on the columns selected in your query.
+    template<typename RowType>
+    models::User rowToUserModelDTO(const RowType& row);
 
-    // Database configuration, loaded from Drogon's app config
+    // Database configuration for sqlpp23, loaded from Drogon's app config
     sqlpp::sqlite3::connection_config dbConfig_;
 };
 

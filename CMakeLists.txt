@@ -35,6 +35,7 @@ ExternalProject_Add(dependencies_superbuild_step
     INSTALL_COMMAND   ""                               # Dependencies install themselves via their CMAKE_INSTALL_PREFIX
     CMAKE_ARGS        # Arguments passed to the CMake process that runs extern/CMakeLists.txt
         # Propagate build type and compiler
+        -DCMAKE_VERBOSE_MAKEFILE=ON
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         # This is the crucial CMAKE_INSTALL_PREFIX for the extern/CMakeLists.txt process.
@@ -63,14 +64,15 @@ ExternalProject_Add(main_app_build_step
                                                      # (unless app/CMakeLists.txt has install rules and this changes)
     CMAKE_ARGS        # Arguments passed to the CMake process that runs app/CMakeLists.txt
         # Propagate build type and compiler
+        -DCMAKE_VERBOSE_MAKEFILE=ON
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         # Tells app/CMakeLists.txt where to find packages (HinnantDate, jwt-cpp, sqlpp23)
         # that were installed by the dependencies_superbuild_step.
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/install_dependencies
     # Logging for this ExternalProject step
-    LOG_CONFIGURE 1
-    LOG_BUILD 1
+    LOG_CONFIGURE 0
+    LOG_BUILD 0
     # LOG_INSTALL 1 # Only if INSTALL_COMMAND is not ""
 )
 

@@ -5,7 +5,8 @@
 #include <drogon/orm/Row.h>
 #include <drogon/orm/Field.h>
 #include <drogon/orm/Mapper.h>
-#include <trantor/utils/Date.h>
+#include <trantor/utils/Date.h> // For timestamps
+#include <trantor/utils/Utilities.h> // For UUID generation if needed
 #include <optional>
 #include <string>
 
@@ -16,25 +17,13 @@ namespace app
 namespace models
 {
 
-/**
- * @brief User model class for Drogon ORM
- */
 class User
 {
   public:
+    // Constructors
     User() = default;
-    
-    // Static method to create a User from a Row
-    static User fromRow(const ::drogon::orm::Row &row);
-    
-    // Member variables
-    std::optional<int64_t> id_;
-    std::string username_;
-    std::string email_;
-    std::string hashedPassword_; // Renamed for clarity
-    trantor::Date createdAt_;
-    trantor::Date updatedAt_;
-    
+    explicit User(const drogon::orm::Row &row);
+
     // Getters and Setters
     std::optional<std::int64_t> getId() const { return id_; }
     void setId(const std::int64_t &id) { id_ = id; }
@@ -53,6 +42,15 @@ class User
 
     trantor::Date getUpdatedAt() const { return updatedAt_; }
     void setUpdatedAt(const trantor::Date &updatedAt) { updatedAt_ = updatedAt; }
+
+  private:
+    // Member variables
+    std::optional<int64_t> id_;
+    std::string username_;
+    std::string email_;
+    std::string hashedPassword_; // Renamed for clarity
+    trantor::Date createdAt_;
+    trantor::Date updatedAt_;
 };
 
 } // namespace models

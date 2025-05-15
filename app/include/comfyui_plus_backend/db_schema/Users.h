@@ -7,8 +7,6 @@
 #include <drogon/orm/Mapper.h>
 #include <trantor/utils/Date.h> // For timestamps
 #include <trantor/utils/Utilities.h> // For UUID generation if needed
-#include <optional>
-#include <string>
 
 namespace comfyui_plus_backend
 {
@@ -20,9 +18,8 @@ namespace models
 class User
 {
   public:
-    // Constructors
     User() = default;
-    explicit User(const drogon::orm::Row &row);
+    User(const drogon::orm::Row &row); // Constructor from ORM Row
 
     // Getters and Setters
     std::optional<std::int64_t> getId() const { return id_; }
@@ -43,7 +40,6 @@ class User
     trantor::Date getUpdatedAt() const { return updatedAt_; }
     void setUpdatedAt(const trantor::Date &updatedAt) { updatedAt_ = updatedAt; }
 
-  private:
     // Member variables
     std::optional<int64_t> id_;
     std::string username_;

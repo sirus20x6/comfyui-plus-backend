@@ -1,11 +1,11 @@
 #include "comfyui_plus_backend/services/UserService.h"
 #include "comfyui_plus_backend/db_schema/Users.h"    // Your sqlpp23 table schema
 #include "comfyui_plus_backend/utils/PasswordUtils.h"
-#include <sqlpp23/sqlpp.h>                          // Main sqlpp23 header
-#include <sqlpp23/statement.h>                      // For sqlpp::statement
-#include <sqlpp23/clause_mixins.h>                  // For .where(), .from() etc.
-#include <sqlpp23/select.h>
-#include <sqlpp23/insert.h>
+#include <sqlpp23/sqlpp23.h>                          // Main sqlpp23 header
+#include <sqlpp23/core/query/statement.h>                      // For sqlpp::statement
+//#include <sqlpp23/clause_mixins.h>                  // For .where(), .from() etc.
+#include <sqlpp23/core/clause/select.h>
+#include <sqlpp23/core/clause/insert.h>
 // #include <sqlpp23/update.h> // If you need update
 // #include <sqlpp23/delete.h> // If you need delete_from (was remove_from)
 #include <drogon/drogon.h>

@@ -1,11 +1,11 @@
 // app/include/comfyui_plus_backend/db_schema/Users.h
 #pragma once
 
-#include <sqlpp23/table.h>
-#include <sqlpp23/column.h>
-#include <sqlpp23/char_sequence.h> // For sqlpp::text
-#include <sqlpp23/data_types.h>    // For sqlpp::integer, sqlpp::time_point etc.
-#include <sqlpp23/name_tag.h>      // For SQLPP_CREATE_NAME_TAG
+#include <sqlpp23/core/basic/table.h>
+#include <sqlpp23/core/basic/column.h>
+#include <sqlpp23/core/name/char_sequence.h> // For sqlpp::text
+#include <sqlpp23/core/type_traits/data_type.h>    // For sqlpp::integer, sqlpp::time_point etc.
+#include <sqlpp23/core/name/name_tag.h>      // For SQLPP_CREATE_NAME_TAG
 
 namespace Schema // Or your chosen namespace
 {

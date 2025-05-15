@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector> // For salt
+#include <cstdint> // For uint32_t and other integer types
 
 namespace comfyui_plus_backend
 {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "comfyui_plus_backend/models/User.h" // Your Drogon-style User model (DTO)
-#include <sqlpp23/sqlite3_connection.h>       // <<< CHANGED: For sqlpp23 sqlite3 connection
+#include <sqlpp23/sqlite3/sqlite3.h>                  // For sqlpp23 sqlite3 connection
 #include <string>
 #include <optional>
 #include <memory> // For std::shared_ptr
@@ -47,7 +47,7 @@ class UserService
     // Converts an sqlpp23 result row to your application's User model DTO
     // The RowType will depend on the columns selected in your query.
     template<typename RowType>
-    models::User rowToUserModelDTO(const RowType& row);
+    models::User rowToUserModel(const RowType& row);
 
     // Database configuration for sqlpp23, loaded from Drogon's app config
     sqlpp::sqlite3::connection_config dbConfig_;

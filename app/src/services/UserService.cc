@@ -209,15 +209,22 @@ bool UserService::userExists(const std::string& username, const std::string& ema
     try {
         auto& storage = dbManager_.getStorage();
         
-        // Check if a user with the given username or email exists
-        auto count = storage.count<db::models::User>(
-            sqlite_orm::where(
-                sqlite_orm::c(&db::models::User::username) == username
-                or sqlite_orm::c(&db::models::User::email) == email
-            )
+        // First check username
+        auto usernameCount = storage.count<db::models::User>(
+            sqlite_orm::where(sqlite_orm::c(&db::models::User::username) == username)
         );
         
-        return count > 0;
+        // If username exists, no need to check email
+        if (usernameCount > 0) {
+            return true;
+        }
+        
+        // Check email
+        auto emailCount = storage.count<db::models::User>(
+            sqlite_orm::where(sqlite_orm::c(&db::models::User::email) == email)
+        );
+        
+        return emailCount > 0;
     }
     catch (const std::exception &e) {
         LOG_ERROR << "Error in userExists check: " << e.what();

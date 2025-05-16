@@ -1,6 +1,8 @@
+// app/src/filters/JwtAuthFilter.cc
 #include "comfyui_plus_backend/filters/JwtAuthFilter.h"
 #include "comfyui_plus_backend/services/JwtService.h"
 #include <drogon/drogon.h>
+#include <memory>
 
 using namespace comfyui_plus_backend::app::filters;
 using namespace comfyui_plus_backend::app::services;

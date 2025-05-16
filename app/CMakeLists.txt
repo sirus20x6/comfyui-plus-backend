@@ -30,8 +30,22 @@ set(APP_SOURCES
 )
 
 # --- Find System Packages ---
-# Find SQLite3 first to avoid conflicts with Drogon's internal finder
-find_package(SQLite3 REQUIRED)
+# Look for libSQL first
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBSQL IMPORTED_TARGET libsql)
+
+if(LIBSQL_FOUND)
+    message(STATUS "Found libSQL: ${LIBSQL_LIBRARIES}")
+    set(SQL_LIBRARIES ${LIBSQL_LIBRARIES})
+    set(SQL_INCLUDE_DIRS ${LIBSQL_INCLUDE_DIRS})
+    add_definitions(-DUSE_LIBSQL)
+else()
+    message(STATUS "libSQL not found, falling back to SQLite3")
+    # Find SQLite3 as a fallback
+    find_package(SQLite3 REQUIRED)
+    set(SQL_LIBRARIES ${SQLite3_LIBRARIES})
+    set(SQL_INCLUDE_DIRS ${SQLite3_INCLUDE_DIRS})
+endif()
 
 # Set a variable to prevent Drogon from finding SQLite3 again
 set(DROGON_USING_EXTERNAL_SQLITE3 TRUE CACHE INTERNAL "")
@@ -52,10 +66,12 @@ endif()
 message(STATUS "app/CMakeLists.txt: Set jwt-cpp_DIR to ${jwt-cpp_DIR}")
 find_package(jwt-cpp REQUIRED)
 
-# Find sqlite_orm
-find_package(SqliteOrm QUIET)
-
-if(NOT SQLITE_ORM_FOUND)
+# --- Handle sqlite_orm ---
+# Check if include directory exists
+set(SQLITE_ORM_INCLUDE_DIR "${CMAKE_PREFIX_PATH}/sqlite_orm/include")
+if(EXISTS "${SQLITE_ORM_INCLUDE_DIR}/sqlite_orm/sqlite_orm.h")
+    message(STATUS "Found sqlite_orm in expected install location: ${SQLITE_ORM_INCLUDE_DIR}")
+else()
     message(STATUS "Using embedded sqlite_orm approach as fallback...")
     # Create a source directory for the embedded header
     set(EMBEDDED_SQLITE_ORM_DIR "${CMAKE_CURRENT_BINARY_DIR}/embedded_sqlite_orm")
@@ -74,14 +90,6 @@ if(NOT SQLITE_ORM_FOUND)
     list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
     if(STATUS_CODE EQUAL 0)
         set(SQLITE_ORM_INCLUDE_DIR "${EMBEDDED_SQLITE_ORM_DIR}/include")
-        set(SQLITE_ORM_FOUND TRUE)
-        
-        # Create custom target
-        add_library(SQLITE_ORM::SqliteOrm INTERFACE IMPORTED)
-        set_target_properties(SQLITE_ORM::SqliteOrm PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${SQLITE_ORM_INCLUDE_DIR}"
-        )
-        
         message(STATUS "Successfully downloaded sqlite_orm.h to ${SQLITE_ORM_INCLUDE_DIR}")
     else()
         list(GET DOWNLOAD_STATUS 1 ERROR_MESSAGE)
@@ -89,7 +97,7 @@ if(NOT SQLITE_ORM_FOUND)
     endif()
 endif()
 
-message(STATUS "app/CMakeLists.txt: Found sqlite_orm include dir: ${SQLITE_ORM_INCLUDE_DIR}")
+message(STATUS "app/CMakeLists.txt: Will use sqlite_orm include dir: ${SQLITE_ORM_INCLUDE_DIR}")
 
 # --- Target Definition ---
 add_executable(${PROJECT_NAME} ${APP_SOURCES})
@@ -97,15 +105,32 @@ add_executable(${PROJECT_NAME} ${APP_SOURCES})
 target_include_directories(${PROJECT_NAME}
     SYSTEM PRIVATE
         "${APP_INCLUDE_DIR}"
+        ${SQL_INCLUDE_DIRS}
+        "${SQLITE_ORM_INCLUDE_DIR}"  # Add direct reference to include dir
 )
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
         Drogon::Drogon
-        ${SQLite3_LIBRARIES}  # Use the variable from find_package
+        ${SQL_LIBRARIES}
         Argon2::Argon2
         jwt-cpp::jwt-cpp
-        SQLITE_ORM::SqliteOrm
+)
+
+# --- Install Targets ---
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION bin
+)
+
+install(FILES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/config.json"
+    DESTINATION bin
+)
+
+install(DIRECTORY 
+    "${CMAKE_CURRENT_SOURCE_DIR}/database/migrations"
+    DESTINATION bin/database
+    FILES_MATCHING PATTERN "*.sql"
 )
 
 # --- Post-Build ---
@@ -115,23 +140,4 @@ add_custom_command(
             "${CMAKE_CURRENT_SOURCE_DIR}/config.json"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config.json"
     COMMENT "Copying config.json to app build directory"
-)
-
-# --- Install Targets ---
-# Install the executable
-install(TARGETS ${PROJECT_NAME}
-    RUNTIME DESTINATION bin
-)
-
-# Install configuration files
-install(FILES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/config.json"
-    DESTINATION bin
-)
-
-# Also install database migrations if needed
-install(DIRECTORY 
-    "${CMAKE_CURRENT_SOURCE_DIR}/database/migrations"
-    DESTINATION bin/database
-    FILES_MATCHING PATTERN "*.sql"
 )

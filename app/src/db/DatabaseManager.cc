@@ -1,6 +1,8 @@
+// app/src/db/DatabaseManager.cc
 #include "comfyui_plus_backend/db/DatabaseManager.h"
 #include <drogon/drogon.h>
 #include <filesystem>
+#include <sstream> // Added for std::stringstream
 
 namespace comfyui_plus_backend
 {
@@ -46,7 +48,7 @@ bool DatabaseManager::initialize(const std::string& dbPath) {
         
         // Initialize the main storage
         dbPath_ = dbPath;
-        mainStorage_ = std::make_unique<Storage>(createStorage(dbPath_));
+        mainStorage_ = std::make_unique<comfyui_plus_backend::app::db::Storage>(createStorage(dbPath_));
         
         // Create tables if they don't exist
         syncSchema();
@@ -60,7 +62,7 @@ bool DatabaseManager::initialize(const std::string& dbPath) {
     }
 }
 
-Storage& DatabaseManager::getStorage() {
+comfyui_plus_backend::app::db::Storage& DatabaseManager::getStorage() {
     if (!initialized_) {
         throw std::runtime_error("DatabaseManager not initialized");
     }
@@ -69,9 +71,12 @@ Storage& DatabaseManager::getStorage() {
     if (std::this_thread::get_id() != std::thread::id()) {
         // Initialize thread-local storage if not already done
         if (!threadLocalData_.storage) {
-            LOG_DEBUG << "Creating thread-local database connection for thread ID: " 
-                    << std::this_thread::get_id();
-            threadLocalData_.storage = std::make_unique<Storage>(createStorage(dbPath_));
+            // Convert the thread ID to a string representation
+            std::stringstream ss;
+            ss << std::this_thread::get_id();
+            LOG_DEBUG << "Creating thread-local database connection for thread ID: " << ss.str();
+            
+            threadLocalData_.storage = std::make_unique<comfyui_plus_backend::app::db::Storage>(createStorage(dbPath_));
         }
         return *threadLocalData_.storage;
     }

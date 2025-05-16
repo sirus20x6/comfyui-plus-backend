@@ -36,34 +36,31 @@ ExternalProject_Add(dependencies_superbuild_step
         # into subdirectories of this path.
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install_dependencies
         # Pass system SQLite3 paths
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # removing this causes the build to fail
         -DSQLITE3_INCLUDE_DIRS=${SQLite3_INCLUDE_DIRS}
         -DSQLITE3_LIBRARIES=${SQLite3_LIBRARIES}
     # Logging for this ExternalProject step
-    LOG_CONFIGURE 1
-    LOG_BUILD 1
-    LOG_INSTALL 1 # Even with INSTALL_COMMAND "", it's good to log if it tries anything
+    LOG_CONFIGURE 0
+    LOG_BUILD 0
+    LOG_INSTALL 0 # Even with INSTALL_COMMAND "", it's good to log if it tries anything
 )
 
 # --- Main Application Build Step (manages building your actual application) ---
 # This step will run the CMakeLists.txt located in the 'app' subdirectory.
 ExternalProject_Add(main_app_build_step
-    DEPENDS           dependencies_superbuild_step # CRUCIAL: Ensures dependencies are built first
-    PREFIX            ${EP_BASE_DIR}/app_ep_prefix     # Directory for this EP step's own files
-    SOURCE_DIR        ${CMAKE_CURRENT_SOURCE_DIR}/app  # Location of your app/CMakeLists.txt
-    BINARY_DIR        ${EP_BASE_DIR}/app_build         # Where app/CMakeLists.txt will be configured and built
-                                                     # Your final executable will be inside this directory.
-    INSTALL_COMMAND   ""                               # Your app doesn't "install" from this EP step by default
-                                                     # (unless app/CMakeLists.txt has install rules and this changes)
-    CMAKE_ARGS        # Arguments passed to the CMake process that runs app/CMakeLists.txt
-        # Propagate build type and compiler
+    DEPENDS           dependencies_superbuild_step
+    PREFIX            ${EP_BASE_DIR}/app_ep_prefix
+    SOURCE_DIR        ${CMAKE_CURRENT_SOURCE_DIR}/app
+    BINARY_DIR        ${EP_BASE_DIR}/app_build
+    INSTALL_COMMAND   ${CMAKE_COMMAND} --build . --target install
+    CMAKE_ARGS
         -DCMAKE_VERBOSE_MAKEFILE=ON
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-        # Tells app/CMakeLists.txt where to find packages (HinnantDate, jwt-cpp, libsql)
-        # that were installed by the dependencies_superbuild_step.
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # removing this causes the build to fail
         -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/install_dependencies
-    # Logging for this ExternalProject step
+        -DCMAKE_INSTALL_PREFIX=${EP_BASE_DIR}/install
     LOG_CONFIGURE 0
     LOG_BUILD 0
-    # LOG_INSTALL 1 # Only if INSTALL_COMMAND is not ""
+    LOG_INSTALL 0
 )

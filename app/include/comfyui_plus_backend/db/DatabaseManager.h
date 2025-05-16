@@ -3,167 +3,76 @@
 #include <memory>
 #include <string>
 #include <mutex>
-#include <vector>
-#include <deque>
-#include <sqlite_orm/sqlite_orm.h>
-#include "comfyui_plus_backend/db/simple_storage.h"
+#include <thread>
+#include <iostream>
+#include "comfyui_plus_backend/db/simple_storage.h"  // Must come BEFORE this declaration
 
 namespace comfyui_plus_backend
 {
 namespace app
 {
-namespace services
+namespace db
 {
 
 /**
- * @brief A simple database connection pool for SQLite
+ * @brief Manager for database connections
  * 
- * This class manages a pool of database connections that can be
- * reused across different requests to improve performance.
+ * This class manages database access, providing thread-local SQLite 
+ * connections to ensure thread safety and performance.
  */
-class DbConnectionPool
+class DatabaseManager
 {
 public:
     // Get the singleton instance
-    static DbConnectionPool& getInstance() {
-        static DbConnectionPool instance;
-        return instance;
-    }
-
-    // Initialize the pool with SQLite connections
-    bool initSqlitePool(const std::string& dbPath, size_t poolSize, bool debug = false) {
-        std::lock_guard<std::mutex> lock(poolMutex_);
-        
-        if (initialized_) {
-            return true; // Already initialized
-        }
-        
-        try {
-            // Create the initial connections
-            for (size_t i = 0; i < poolSize; ++i) {
-                auto storage = std::make_shared<comfyui_plus_backend::app::db::Storage>(
-                    comfyui_plus_backend::app::db::createStorage(dbPath));
-                
-                // Synchronize schema to create tables if they don't exist
-                if (i == 0) {
-                    storage->sync_schema();
-                }
-                
-                connectionPool_.push_back(storage);
-            }
-            
-            dbPath_ = dbPath;
-            debugMode_ = debug;
-            initialized_ = true;
-            return true;
-        }
-        catch (const std::exception& e) {
-            // Log the error
-            if (debug) {
-                // Use drogon logging if available, otherwise std::cerr
-                std::cerr << "Error initializing connection pool: " << e.what() << std::endl;
-            }
-            return false;
-        }
-    }
-
-    // Get a connection from the pool
-    std::shared_ptr<comfyui_plus_backend::app::db::Storage> getConnection() {
-        std::lock_guard<std::mutex> lock(poolMutex_);
-        
-        if (!initialized_ || connectionPool_.empty()) {
-            if (debugMode_) {
-                std::cerr << "Connection pool not initialized or empty" << std::endl;
-            }
-            
-            // If there are no connections, try to create a new one
-            if (!dbPath_.empty()) {
-                try {
-                    auto storage = std::make_shared<comfyui_plus_backend::app::db::Storage>(
-                        comfyui_plus_backend::app::db::createStorage(dbPath_));
-                    return storage;
-                }
-                catch (const std::exception& e) {
-                    if (debugMode_) {
-                        std::cerr << "Error creating new connection: " << e.what() << std::endl;
-                    }
-                    return nullptr;
-                }
-            }
-            
-            return nullptr;
-        }
-        
-        // Get a connection from the pool
-        auto connection = connectionPool_.front();
-        connectionPool_.pop_front();
-        
-        // Return the connection to be used
-        usedConnections_.push_back(connection);
-        return connection;
-    }
-
-    // Return a connection to the pool
-    void returnConnection(std::shared_ptr<comfyui_plus_backend::app::db::Storage> connection) {
-        std::lock_guard<std::mutex> lock(poolMutex_);
-        
-        // Find and remove from used connections
-        auto it = std::find(usedConnections_.begin(), usedConnections_.end(), connection);
-        if (it != usedConnections_.end()) {
-            usedConnections_.erase(it);
-            connectionPool_.push_back(connection);
-        }
-    }
-
-    // Check if pool is initialized
-    bool isInitialized() const {
-        return initialized_;
-    }
-
-    // Get the current pool size
-    size_t getPoolSize() const {
-        std::lock_guard<std::mutex> lock(poolMutex_);
-        return connectionPool_.size();
-    }
-
-    // Get the number of used connections
-    size_t getUsedConnectionCount() const {
-        std::lock_guard<std::mutex> lock(poolMutex_);
-        return usedConnections_.size();
-    }
+    static DatabaseManager& getInstance();
+    
+    // Initialize the database
+    bool initialize(const std::string& dbPath);
+    
+    // Get the database storage for the current thread
+    // Make sure Storage is fully qualified here
+    comfyui_plus_backend::app::db::Storage& getStorage();
+    
+    // Migrate the database schema
+    bool migrateDatabase();
+    
+    // Check if the database is initialized
+    bool isInitialized() const;
 
 private:
     // Private constructor for singleton pattern
-    DbConnectionPool() : initialized_(false), debugMode_(false) {}
+    DatabaseManager();
     
     // Private destructor
-    ~DbConnectionPool() {
-        // Clear the pools to release connections
-        connectionPool_.clear();
-        usedConnections_.clear();
-    }
+    ~DatabaseManager();
     
     // Delete copy constructor and assignment operator
-    DbConnectionPool(const DbConnectionPool&) = delete;
-    DbConnectionPool& operator=(const DbConnectionPool&) = delete;
-
-    // Connection pools
-    std::deque<std::shared_ptr<comfyui_plus_backend::app::db::Storage>> connectionPool_;
-    std::vector<std::shared_ptr<comfyui_plus_backend::app::db::Storage>> usedConnections_;
+    DatabaseManager(const DatabaseManager&) = delete;
+    DatabaseManager& operator=(const DatabaseManager&) = delete;
     
-    // Database path for creating new connections if needed
+    // Synchronize database schema
+    void syncSchema();
+    
+    // Thread-local storage for per-thread database access
+    struct ThreadLocalData {
+        std::unique_ptr<comfyui_plus_backend::app::db::Storage> storage;
+    };
+    
+    static thread_local ThreadLocalData threadLocalData_;
+    
+    // Path to the database file
     std::string dbPath_;
     
-    // Mutex for thread safety
-    mutable std::mutex poolMutex_;
+    // Main database storage
+    std::unique_ptr<comfyui_plus_backend::app::db::Storage> mainStorage_;
+    
+    // Mutex for thread safety during initialization
+    std::mutex initMutex_;
     
     // Initialization flag
-    bool initialized_;
-    
-    // Debug mode flag
-    bool debugMode_;
+    bool initialized_ = false;
 };
 
-} // namespace services
+} // namespace db
 } // namespace app
 } // namespace comfyui_plus_backend

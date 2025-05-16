@@ -116,3 +116,22 @@ add_custom_command(
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config.json"
     COMMENT "Copying config.json to app build directory"
 )
+
+# --- Install Targets ---
+# Install the executable
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION bin
+)
+
+# Install configuration files
+install(FILES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/config.json"
+    DESTINATION bin
+)
+
+# Also install database migrations if needed
+install(DIRECTORY 
+    "${CMAKE_CURRENT_SOURCE_DIR}/database/migrations"
+    DESTINATION bin/database
+    FILES_MATCHING PATTERN "*.sql"
+)

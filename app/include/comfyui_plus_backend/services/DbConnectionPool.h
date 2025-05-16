@@ -5,6 +5,8 @@
 #include <mutex>
 #include <vector>
 #include <deque>
+#include <iostream>  // Added for std::cerr
+#include <algorithm> // Added for std::find
 #include <sqlite_orm/sqlite_orm.h>
 #include "comfyui_plus_backend/db/simple_storage.h"
 

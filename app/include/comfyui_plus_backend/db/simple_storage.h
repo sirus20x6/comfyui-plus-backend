@@ -21,7 +21,7 @@ inline auto createStorage(const std::string& dbPath) {
         dbPath,
         // Users table
         make_table("users",
-            make_column("id", &User::id, primary_key(), sqlite_orm::autoincrement()),
+            make_column("id", &User::id, primary_key()),  // Removed autoincrement
             make_column("username", &User::username, unique()),
             make_column("email", &User::email, unique()),
             make_column("hashed_password", &User::hashedPassword),
@@ -31,7 +31,7 @@ inline auto createStorage(const std::string& dbPath) {
         
         // Workflows table
         make_table("workflows",
-            make_column("id", &Workflow::id, primary_key(), sqlite_orm::autoincrement()),
+            make_column("id", &Workflow::id, primary_key()),  // Removed autoincrement
             make_column("user_id", &Workflow::userId),
             make_column("name", &Workflow::name),
             make_column("description", &Workflow::description),
@@ -45,13 +45,13 @@ inline auto createStorage(const std::string& dbPath) {
         
         // Tags table
         make_table("tags",
-            make_column("id", &Tag::id, primary_key(), sqlite_orm::autoincrement()),
+            make_column("id", &Tag::id, primary_key()),  // Removed autoincrement
             make_column("name", &Tag::name, unique())
         ),
         
         // WorkflowTags junction table
         make_table("workflow_tags",
-            make_column("id", &WorkflowTag::id, primary_key(), sqlite_orm::autoincrement()),
+            make_column("id", &WorkflowTag::id, primary_key()),  // Removed autoincrement
             make_column("workflow_id", &WorkflowTag::workflowId),
             make_column("tag_id", &WorkflowTag::tagId),
             foreign_key(&WorkflowTag::workflowId).references(&Workflow::id),

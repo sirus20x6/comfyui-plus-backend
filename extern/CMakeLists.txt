@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.5)
 project(ExternDependencies LANGUAGES CXX) # This project name is for this sub-CMake process
 
 include(ExternalProject)
@@ -28,9 +28,10 @@ ExternalProject_Add(
   CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/jwt-cpp
     -DBUILD_SHARED_LIBS=OFF -DJWT_BUILD_EXAMPLES=OFF -DJWT_BUILD_TESTS=OFF
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # removing this causes the build to fail
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
   INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/jwt-cpp
-  LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
+  LOG_CONFIGURE 0 LOG_BUILD 0 LOG_INSTALL 0
 )
 
 # --- libsql (replacing sqlpp23) ---
@@ -52,8 +53,9 @@ ExternalProject_Add(
     -DBUILD_EXAMPLES=OFF
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # removing this causes the build to fail
   INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/sqlite_orm
-  LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
+  LOG_CONFIGURE 0 LOG_BUILD 0 LOG_INSTALL 0
 )
 
 add_custom_target(BuildExternals ALL

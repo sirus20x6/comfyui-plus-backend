@@ -4,7 +4,6 @@
 #include <drogon/HttpTypes.h> // For k400BadRequest etc.
 #include <drogon/drogon.h>    // For LOG_DEBUG etc.
 
-// Use the namespace aliases for brevity
 namespace cupb_controllers = comfyui_plus_backend::app::controllers;
 namespace cupb_services = comfyui_plus_backend::app::services;
 

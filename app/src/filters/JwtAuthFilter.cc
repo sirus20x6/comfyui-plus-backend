@@ -4,17 +4,27 @@
 #include <drogon/drogon.h>
 #include <memory>
 
-using namespace comfyui_plus_backend::app::filters;
-using namespace comfyui_plus_backend::app::services;
-
-void JwtAuthFilter::doFilter(const drogon::HttpRequestPtr &req,
-                          drogon::FilterCallback &&fcb,
-                          drogon::FilterChainCallback &&fccb)
+namespace comfyui_plus_backend
 {
-    LOG_DEBUG << "JwtAuthFilter processing request";
+namespace app
+{
+namespace filters
+{
+
+void JwtAuthFilter::doFilter(const drogon::HttpRequestPtr& req,
+                        drogon::FilterCallback&& fcb,
+                        drogon::FilterChainCallback&& fccb)
+{
+    // Check if this is a path we want to protect
+    std::string path = req->getPath();
     
-    // Initialize JWT service
-    JwtService jwtService;
+    // Skip if the path is not one we want to protect
+    if (!isProtectedPath(path)) {
+        fccb();
+        return;
+    }
+    
+    LOG_DEBUG << "JwtAuthFilter processing request for path: " << path;
     
     // Extract token from Authorization header
     std::string authHeader = req->getHeader("Authorization");
@@ -22,7 +32,7 @@ void JwtAuthFilter::doFilter(const drogon::HttpRequestPtr &req,
     
     // Check if Authorization header exists and starts with "Bearer "
     if (authHeader.empty() || authHeader.substr(0, 7) != "Bearer ") {
-        LOG_WARN << "Missing or invalid Authorization header";
+        LOG_WARN << "Missing or invalid Authorization header for path: " << path;
         auto resp = drogon::HttpResponse::newHttpJsonResponse({{"error", "Unauthorized: Missing or invalid token"}});
         resp->setStatusCode(drogon::HttpStatusCode::k401Unauthorized);
         fcb(resp);
@@ -32,10 +42,13 @@ void JwtAuthFilter::doFilter(const drogon::HttpRequestPtr &req,
     // Extract token (remove "Bearer " prefix)
     token = authHeader.substr(7);
     
+    // Initialize JWT service
+    services::JwtService jwtService;
+    
     // Verify token
     auto decodedToken = jwtService.verifyToken(token);
     if (!decodedToken) {
-        LOG_WARN << "Invalid JWT token";
+        LOG_WARN << "Invalid JWT token for path: " << path;
         auto resp = drogon::HttpResponse::newHttpJsonResponse({{"error", "Unauthorized: Invalid token"}});
         resp->setStatusCode(drogon::HttpStatusCode::k401Unauthorized);
         fcb(resp);
@@ -45,7 +58,7 @@ void JwtAuthFilter::doFilter(const drogon::HttpRequestPtr &req,
     // Extract user ID from token
     auto userId = jwtService.getUserIdFromToken(*decodedToken);
     if (!userId) {
-        LOG_WARN << "JWT token valid but user_id claim not found";
+        LOG_WARN << "JWT token valid but user_id claim not found for path: " << path;
         auto resp = drogon::HttpResponse::newHttpJsonResponse({{"error", "Unauthorized: Invalid token format"}});
         resp->setStatusCode(drogon::HttpStatusCode::k401Unauthorized);
         fcb(resp);
@@ -64,6 +77,15 @@ void JwtAuthFilter::doFilter(const drogon::HttpRequestPtr &req,
     }
     
     // Continue the filter chain
-    LOG_DEBUG << "JWT authentication successful for user ID: " << *userId;
+    LOG_DEBUG << "JWT authentication successful for user ID: " << *userId << " on path: " << path;
     fccb();
 }
+
+bool JwtAuthFilter::isProtectedPath(const std::string& path) {
+    // Check if the path starts with "/workflows" or is "/auth/me"
+    return path.find("/workflows") == 0 || path == "/auth/me";
+}
+
+} // namespace filters
+} // namespace app
+} // namespace comfyui_plus_backend

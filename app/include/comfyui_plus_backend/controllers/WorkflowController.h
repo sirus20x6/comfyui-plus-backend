@@ -1,3 +1,4 @@
+// app/include/comfyui_plus_backend/controllers/WorkflowController.h
 #pragma once
 
 #include <drogon/HttpController.h>
@@ -16,15 +17,16 @@ public:
     WorkflowController();
 
     METHOD_LIST_BEGIN
-    // Define your routes and the methods they map to.
-    ADD_METHOD_TO(WorkflowController::getWorkflows, "/workflows", {drogon::HttpMethod::Get}, "JwtAuthFilter");
-    ADD_METHOD_TO(WorkflowController::createWorkflow, "/workflows", {drogon::HttpMethod::Post}, "JwtAuthFilter");
-    ADD_METHOD_TO(WorkflowController::getWorkflowById, "/workflows/{id}", {drogon::HttpMethod::Get}, "JwtAuthFilter");
-    ADD_METHOD_TO(WorkflowController::updateWorkflow, "/workflows/{id}", {drogon::HttpMethod::Put}, "JwtAuthFilter");
-    ADD_METHOD_TO(WorkflowController::deleteWorkflow, "/workflows/{id}", {drogon::HttpMethod::Delete}, "JwtAuthFilter");
+    // Define routes without explicitly mentioning any filter.
+    // Our JwtAuthFilter will check paths internally.
+    ADD_METHOD_TO(WorkflowController::getWorkflows, "/workflows", {drogon::HttpMethod::Get});
+    ADD_METHOD_TO(WorkflowController::createWorkflow, "/workflows", {drogon::HttpMethod::Post});
+    ADD_METHOD_TO(WorkflowController::getWorkflowById, "/workflows/{id}", {drogon::HttpMethod::Get});
+    ADD_METHOD_TO(WorkflowController::updateWorkflow, "/workflows/{id}", {drogon::HttpMethod::Put});
+    ADD_METHOD_TO(WorkflowController::deleteWorkflow, "/workflows/{id}", {drogon::HttpMethod::Delete});
     METHOD_LIST_END
 
-    // Endpoint handler declarations
+    // Endpoint handler declarations (no changes)
     void getWorkflows(const drogon::HttpRequestPtr &req,
                      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
                      

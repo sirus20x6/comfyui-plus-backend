@@ -1,3 +1,4 @@
+// app/src/services/JwtService.cc
 #include "comfyui_plus_backend/services/JwtService.h"
 #include <drogon/drogon.h> // For app().getCustomConfig() and LOG_ERROR
 #include <memory>          // For std::make_unique if needed (not directly here)
@@ -14,28 +15,43 @@ JwtService::JwtService()
 {
     try
     {
+        // Get the config directly from the app instance
         const auto &jsonConfig = drogon::app().getCustomConfig(); // Gets the whole config.json content
+        
+        // Debug the config to see what we're working with
+        LOG_DEBUG << "Configuration loaded: " << jsonConfig.toStyledString();
+        
         if (jsonConfig.isMember("jwt") && jsonConfig["jwt"].isObject())
         {
+            LOG_DEBUG << "JWT section found in configuration";
             const auto &jwtConfig = jsonConfig["jwt"];
-            if (jwtConfig["secret"].isString())
+            
+            if (jwtConfig.isMember("secret") && jwtConfig["secret"].isString()) {
                 jwtSecret_ = jwtConfig["secret"].asString();
-            else
+                LOG_DEBUG << "JWT secret loaded successfully";
+            } else {
                 LOG_FATAL << "JWT secret not found or not a string in config.json";
+            }
 
-            if (jwtConfig["issuer"].isString())
+            if (jwtConfig.isMember("issuer") && jwtConfig["issuer"].isString()) {
                 jwtIssuer_ = jwtConfig["issuer"].asString();
-            else
+                LOG_DEBUG << "JWT issuer loaded successfully";
+            } else {
                 LOG_FATAL << "JWT issuer not found or not a string in config.json";
+            }
 
-            if (jwtConfig.isMember("audience") && jwtConfig["audience"].isString())
+            if (jwtConfig.isMember("audience") && jwtConfig["audience"].isString()) {
                 jwtAudience_ = jwtConfig["audience"].asString();
+                LOG_DEBUG << "JWT audience loaded successfully";
+            }
             // Audience is optional, so no fatal log if not present
 
-            if (jwtConfig["expires_in_seconds"].isIntegral())
+            if (jwtConfig.isMember("expires_in_seconds") && jwtConfig["expires_in_seconds"].isInt()) {
                 jwtExpiresInSeconds_ = jwtConfig["expires_in_seconds"].asInt64();
-            else
+                LOG_DEBUG << "JWT expires_in_seconds loaded successfully: " << jwtExpiresInSeconds_;
+            } else {
                 LOG_FATAL << "JWT expires_in_seconds not found or not an integer in config.json";
+            }
 
             if (jwtSecret_.empty() || jwtIssuer_.empty() || jwtExpiresInSeconds_ <= 0) {
                  LOG_FATAL << "JWT configuration is invalid (empty secret/issuer or non-positive expiration).";

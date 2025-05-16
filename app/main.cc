@@ -7,6 +7,9 @@
 #include <memory>
 
 int main() {
+    // Load config file first so other components can access it
+    drogon::app().loadConfigFile("config.json");
+    
     // Check SQL library version
     LOG_INFO << "Using SQL library: " << sqlite3_libversion();
     
@@ -15,32 +18,19 @@ int main() {
     LOG_INFO << "SQL thread safety level: " << threadsafe 
              << " (0=single-thread, 1=serialized, 2=multi-thread)";
 
-    // Create the SQLite connection using the createDbClient method with full parameters
-    // Most of these parameters are not used by SQLite, but we need to provide them anyway
-    int connectionNumber = (threadsafe == 2) ? 5 : 1;
-    
-    // Parameters: dbType, host, port, username, passwd, dbName, connectionNum, filename, ...
-    drogon::app().createDbClient("sqlite3", // dbType
-                                 "", // host 
-                                 0,  // port
-                                 "", // username
-                                 "", // password
-                                 "comfyui_plus.sqlite", // database name
-                                 connectionNumber,      // connection number
-                                 "comfyui_plus.sqlite", // filename
-                                 "", // additional connection string
-                                 false,  // sslUsed
-                                 ""); // caPath
-    
-    // Load config file
-    drogon::app().loadConfigFile("config.json");
+    // Since we're having issues with direct DbConfig creation, let's use 
+    // the loadConfigFile approach which already sets up the database
+    // The database is already configured in config.json
     
     // Initialize database
     auto& dbManager = comfyui_plus_backend::app::db::DatabaseManager::getInstance();
     dbManager.initialize("comfyui_plus.sqlite");
     
-    // Register the JWT auth filter explicitly without the path pattern
+    // Create a JWT filter instance
     auto jwtFilter = std::make_shared<comfyui_plus_backend::app::filters::JwtAuthFilter>();
+    
+    // Register the filter - note that we can't register by path
+    // We'll have to check paths inside the filter itself
     drogon::app().registerFilter(jwtFilter);
     
     // Log startup information

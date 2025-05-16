@@ -41,8 +41,7 @@ public:
         try {
             // Create the initial connections
             for (size_t i = 0; i < poolSize; ++i) {
-                auto storage = std::make_shared<comfyui_plus_backend::app::db::Storage>(
-                    comfyui_plus_backend::app::db::createStorage(dbPath));
+                auto storage = std::make_shared<db::Storage>(db::createStorage(dbPath));
                 
                 // Synchronize schema to create tables if they don't exist
                 if (i == 0) {
@@ -68,7 +67,7 @@ public:
     }
 
     // Get a connection from the pool
-    std::shared_ptr<comfyui_plus_backend::app::db::Storage> getConnection() {
+    std::shared_ptr<db::Storage> getConnection() {
         std::lock_guard<std::mutex> lock(poolMutex_);
         
         if (!initialized_ || connectionPool_.empty()) {
@@ -79,8 +78,7 @@ public:
             // If there are no connections, try to create a new one
             if (!dbPath_.empty()) {
                 try {
-                    auto storage = std::make_shared<comfyui_plus_backend::app::db::Storage>(
-                        comfyui_plus_backend::app::db::createStorage(dbPath_));
+                    auto storage = std::make_shared<db::Storage>(db::createStorage(dbPath_));
                     return storage;
                 }
                 catch (const std::exception& e) {
@@ -104,7 +102,7 @@ public:
     }
 
     // Return a connection to the pool
-    void returnConnection(std::shared_ptr<comfyui_plus_backend::app::db::Storage> connection) {
+    void returnConnection(std::shared_ptr<db::Storage> connection) {
         std::lock_guard<std::mutex> lock(poolMutex_);
         
         // Find and remove from used connections
@@ -148,8 +146,8 @@ private:
     DbConnectionPool& operator=(const DbConnectionPool&) = delete;
 
     // Connection pools
-    std::deque<std::shared_ptr<comfyui_plus_backend::app::db::Storage>> connectionPool_;
-    std::vector<std::shared_ptr<comfyui_plus_backend::app::db::Storage>> usedConnections_;
+    std::deque<std::shared_ptr<db::Storage>> connectionPool_;
+    std::vector<std::shared_ptr<db::Storage>> usedConnections_;
     
     // Database path for creating new connections if needed
     std::string dbPath_;

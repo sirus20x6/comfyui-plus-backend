@@ -2,6 +2,7 @@
 
 #include "comfyui_plus_backend/db/DatabaseManager.h"
 #include "comfyui_plus_backend/models/User.h" // Your Drogon-style User model (DTO)
+#include "comfyui_plus_backend/db/models.h" // Include the db models directly
 #include <string>
 #include <optional>
 #include <memory> // For std::shared_ptr
@@ -45,7 +46,7 @@ class UserService
     db::DatabaseManager& dbManager_;
 
     // Converts DB model to your application's User model DTO
-    comfyui_plus_backend::app::models::User dbModelToUserModel(const db::models::User& dbUser);
+    comfyui_plus_backend::app::models::User dbModelToUserModel(const comfyui_plus_backend::app::db::models::User& dbUser);
 
     // Thread safety is handled by sqlite_orm's internal locks and 
     // by having separate connections per thread if needed

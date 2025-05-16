@@ -62,24 +62,12 @@ std::optional<comfyui_plus_backend::app::models::User> UserService::createUser(
         dbUser.createdAt = timestamp;
         dbUser.updatedAt = timestamp;
 
-        // Start a transaction
-        storage.transaction([&] {
-            // Insert the user
-            auto insertedId = storage.insert(dbUser);
-            
-            // Retrieve the inserted user to verify
-            auto users = storage.get_all<db::models::User>(sqlite_orm::where(sqlite_orm::c(&db::models::User::id) == insertedId));
-            
-            if (users.empty()) {
-                LOG_ERROR << "User insertion failed for " << username;
-                return false; // Rolls back the transaction
-            }
-            
-            // Set the ID field of our dbUser object for conversion later
-            dbUser.id = insertedId;
-            return true; // Commits the transaction
-        });
-
+        // Insert the user and get the ID
+        auto insertedId = storage.insert(dbUser);
+        
+        // Set the ID in our user object
+        dbUser.id = insertedId;
+        
         // Convert to API model and return
         return dbModelToUserModel(dbUser);
     }

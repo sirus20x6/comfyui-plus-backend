@@ -87,8 +87,7 @@ bool DatabaseManager::migrateDatabase() {
     
     try {
         // Run migrations or database setup logic here
-        // For example, you could execute SQL scripts from files
-        
+        // In sqlite_orm we can just call sync_schema() which we already do in initialize()
         LOG_INFO << "Database migration complete";
         return true;
     } catch (const std::exception& e) {

@@ -3,6 +3,9 @@
 #include <drogon/drogon.h> // For app().getCustomConfig() and LOG_ERROR
 #include <memory>          // For std::make_unique if needed (not directly here)
 
+// Add this at the top of the file, before namespace declarations
+extern Json::Value globalJwtConfig;
+
 namespace comfyui_plus_backend
 {
 namespace app
@@ -15,65 +18,68 @@ JwtService::JwtService()
 {
     try
     {
-        // Get the config directly from the app instance
-        const auto &jsonConfig = drogon::app().getCustomConfig(); // Gets the whole config.json content
+        // Try to get the config directly from the app instance
+        const auto &jsonConfig = drogon::app().getCustomConfig();
         
-        // Debug the config to see what we're working with
-        LOG_DEBUG << "Configuration loaded: " << jsonConfig.toStyledString();
+        // Debug the raw configuration to see what we're working with
+        LOG_DEBUG << "Drogon config: " << (jsonConfig.isNull() ? "null" : jsonConfig.toStyledString());
         
-        if (jsonConfig.isMember("jwt") && jsonConfig["jwt"].isObject())
-        {
-            LOG_DEBUG << "JWT section found in configuration";
-            const auto &jwtConfig = jsonConfig["jwt"];
-            
-            if (jwtConfig.isMember("secret") && jwtConfig["secret"].isString()) {
-                jwtSecret_ = jwtConfig["secret"].asString();
-                LOG_DEBUG << "JWT secret loaded successfully";
-            } else {
-                LOG_FATAL << "JWT secret not found or not a string in config.json";
-            }
-
-            if (jwtConfig.isMember("issuer") && jwtConfig["issuer"].isString()) {
-                jwtIssuer_ = jwtConfig["issuer"].asString();
-                LOG_DEBUG << "JWT issuer loaded successfully";
-            } else {
-                LOG_FATAL << "JWT issuer not found or not a string in config.json";
-            }
-
-            if (jwtConfig.isMember("audience") && jwtConfig["audience"].isString()) {
-                jwtAudience_ = jwtConfig["audience"].asString();
-                LOG_DEBUG << "JWT audience loaded successfully";
-            }
-            // Audience is optional, so no fatal log if not present
-
-            if (jwtConfig.isMember("expires_in_seconds") && jwtConfig["expires_in_seconds"].isInt()) {
-                jwtExpiresInSeconds_ = jwtConfig["expires_in_seconds"].asInt64();
-                LOG_DEBUG << "JWT expires_in_seconds loaded successfully: " << jwtExpiresInSeconds_;
-            } else {
-                LOG_FATAL << "JWT expires_in_seconds not found or not an integer in config.json";
-            }
-
-            if (jwtSecret_.empty() || jwtIssuer_.empty() || jwtExpiresInSeconds_ <= 0) {
-                 LOG_FATAL << "JWT configuration is invalid (empty secret/issuer or non-positive expiration).";
-                 // In a real app, you might throw here or ensure app doesn't start
-            }
-
-            // Configure the verifier
-            // Note: kazuho_picojson is one of the available traits for JSON handling.
-            // jwt-cpp also supports nlohmann_json if you prefer and link it.
-            verifier_.allow_algorithm(jwt::algorithm::hs256{jwtSecret_})
-                    .with_issuer(jwtIssuer_);
-            
-            if (!jwtAudience_.empty()) {
-                verifier_.with_audience(jwtAudience_);
-            }
+        // Use our global config if Drogon's is null
+        const Json::Value& jwtConfig = jsonConfig.isNull() || !jsonConfig.isMember("jwt") 
+            ? globalJwtConfig 
+            : jsonConfig["jwt"];
+        
+        // Debug the JWT section
+        LOG_DEBUG << "JWT config being used: " << (jwtConfig.isNull() ? "null" : jwtConfig.toStyledString());
+        
+        if (jwtConfig.isNull()) {
+            LOG_FATAL << "JWT configuration is null - neither from app config nor global config!";
+            return;
         }
-        else
-        {
-            LOG_FATAL << "JWT configuration section not found in config.json";
-            // This is a critical error, application should probably not start.
-            // For simplicity here, we log fatal, but in production, throw or exit.
+        
+        if (jwtConfig.isMember("secret") && jwtConfig["secret"].isString()) {
+            jwtSecret_ = jwtConfig["secret"].asString();
+            LOG_DEBUG << "JWT secret loaded successfully";
+        } else {
+            LOG_FATAL << "JWT secret not found or not a string in config";
         }
+
+        if (jwtConfig.isMember("issuer") && jwtConfig["issuer"].isString()) {
+            jwtIssuer_ = jwtConfig["issuer"].asString();
+            LOG_DEBUG << "JWT issuer loaded successfully";
+        } else {
+            LOG_FATAL << "JWT issuer not found or not a string in config";
+        }
+
+        if (jwtConfig.isMember("audience") && jwtConfig["audience"].isString()) {
+            jwtAudience_ = jwtConfig["audience"].asString();
+            LOG_DEBUG << "JWT audience loaded successfully";
+        }
+        // Audience is optional, so no fatal log if not present
+
+        if (jwtConfig.isMember("expires_in_seconds") && jwtConfig["expires_in_seconds"].isInt()) {
+            jwtExpiresInSeconds_ = jwtConfig["expires_in_seconds"].asInt64();
+            LOG_DEBUG << "JWT expires_in_seconds loaded successfully: " << jwtExpiresInSeconds_;
+        } else {
+            LOG_FATAL << "JWT expires_in_seconds not found or not an integer in config";
+        }
+
+        if (jwtSecret_.empty() || jwtIssuer_.empty() || jwtExpiresInSeconds_ <= 0) {
+             LOG_FATAL << "JWT configuration is invalid (empty secret/issuer or non-positive expiration).";
+             // In a real app, you might throw here or ensure app doesn't start
+        }
+
+        // Configure the verifier
+        // Note: kazuho_picojson is one of the available traits for JSON handling.
+        // jwt-cpp also supports nlohmann_json if you prefer and link it.
+        verifier_.allow_algorithm(jwt::algorithm::hs256{jwtSecret_})
+                .with_issuer(jwtIssuer_);
+        
+        if (!jwtAudience_.empty()) {
+            verifier_.with_audience(jwtAudience_);
+        }
+        
+        LOG_INFO << "JWT service initialized successfully";
     }
     catch (const std::exception &e)
     {
@@ -180,7 +186,6 @@ std::optional<int64_t> JwtService::getUserIdFromToken(const jwt::decoded_jwt<jwt
     }
     return std::nullopt;
 }
-
 
 } // namespace services
 } // namespace app
